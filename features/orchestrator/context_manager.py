@@ -96,6 +96,10 @@ class ConversationContextManager:
         self.history.clear()
         self.preferences = UserPreferences()
 
+    def reset_context(self) -> None:
+        """Alias for clear() to reset conversation context."""
+        self.clear()
+
     def __len__(self) -> int:
         """Return the number of messages in the conversation history."""
         return len(self.history)

@@ -4,7 +4,6 @@ This document tracks the progress of features for the AI Travel Planning Assista
 
 ## Planned Features
 
-- [ ] Interactive UI for trip itinerary planning
 - [ ] Memory layer to retain user preferences across sessions
 - [ ] Automated testing pipeline setup
 
@@ -13,6 +12,8 @@ This document tracks the progress of features for the AI Travel Planning Assista
 - [ ] (No features currently in progress)
 
 ## Completed Features
+
+- [x] Interactive UI for trip itinerary planning
 
 - [x] Orchestrator Module (agent logic and context)
 
