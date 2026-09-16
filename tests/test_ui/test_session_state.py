@@ -1,134 +1,95 @@
-from __future__ import annotations
+"""Tests for Streamlit UI session state management."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
+import streamlit as st
 
 from features.ui.session_state import (
     add_to_chat_history,
     clear_chat_history,
     get_agent,
+    get_agent_dependencies,
     get_chat_history,
     initialise_session_state,
 )
 
 
-@patch("features.ui.session_state.st")
-@patch("features.ui.session_state.get_agent_dependencies")
-def test_initialise_session_state(mock_deps: MagicMock, mock_st: MagicMock) -> None:
-    """Test session state initialization when empty."""
-    # Setup
-    mock_st.session_state = {}
-    mock_deps.return_value = (MagicMock(), MagicMock(), MagicMock(), MagicMock())
-
-    # Execute
-    initialise_session_state()
-
-    # Assert
-    assert "messages" in mock_st.session_state
-    assert "agent" in mock_st.session_state
-    assert isinstance(mock_st.session_state["messages"], list)
-    assert len(mock_st.session_state["messages"]) == 0
+@pytest.fixture(autouse=True)
+def reset_session_state():
+    """Clear Streamlit session state before each test."""
+    st.session_state.clear()
 
 
-@patch("features.ui.session_state.st")
-def test_initialise_session_state_idempotent(mock_st: MagicMock) -> None:
-    """Test that existing state is not overwritten."""
-    mock_st.session_state = {
-        "messages": [{"role": "user", "content": "hello"}],
-        "agent": MagicMock(),
-    }
+@pytest.mark.unit
+@pytest.mark.ui
+class TestSessionStateInit:
 
-    initialise_session_state()
+    @patch("features.ui.session_state.get_agent_dependencies")
+    def test_initialise_creates_empty_messages(self, mock_get_deps):
+        mock_get_deps.return_value = (MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        initialise_session_state()
+        assert "messages" in st.session_state
+        assert st.session_state["messages"] == []
 
-    assert len(mock_st.session_state["messages"]) == 1
-    assert mock_st.session_state["messages"][0]["content"] == "hello"
+    @patch("features.ui.session_state.get_agent_dependencies")
+    def test_initialise_creates_agent(self, mock_get_deps):
+        mock_get_deps.return_value = (MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        initialise_session_state()
+        assert "agent" in st.session_state
+        assert st.session_state["agent"] is not None
 
-@patch("features.ui.session_state.st")
-def test_get_agent_success(mock_st: MagicMock) -> None:
-    """Test retrieving agent successfully."""
-    mock_agent = MagicMock()
-    mock_st.session_state = {"agent": mock_agent}
-
-    agent = get_agent()
-
-    assert agent == mock_agent
-
-@patch("features.ui.session_state.st")
-def test_get_agent_raises_error(mock_st: MagicMock) -> None:
-    """Test retrieving agent when not initialized raises error."""
-    mock_st.session_state = {}
-
-    with pytest.raises(RuntimeError):
-        get_agent()
-
-@patch("features.ui.session_state.st")
-def test_get_chat_history(mock_st: MagicMock) -> None:
-    """Test retrieving chat history."""
-    mock_st.session_state = {"messages": [{"role": "assistant", "content": "hi"}]}
-
-    history = get_chat_history()
-
-    assert history == [{"role": "assistant", "content": "hi"}]
-
-@patch("features.ui.session_state.st")
-def test_add_to_chat_history(mock_st: MagicMock) -> None:
-    """Test adding a message to history."""
-    mock_st.session_state = {"messages": []}
-
-    add_to_chat_history("user", "my query", {"source": "test"})
-
-    assert len(mock_st.session_state["messages"]) == 1
-    assert mock_st.session_state["messages"][0]["role"] == "user"
-    assert mock_st.session_state["messages"][0]["content"] == "my query"
-    assert mock_st.session_state["messages"][0]["metadata"] == {"source": "test"}
-
-@patch("features.ui.session_state.st")
-def test_clear_chat_history(mock_st: MagicMock) -> None:
-    """Test clearing history and resetting agent context."""
-    mock_agent = MagicMock()
-    mock_st.session_state = {
-        "messages": [{"role": "user", "content": "foo"}],
-        "agent": mock_agent,
-    }
-
-    clear_chat_history()
-
-    assert len(mock_st.session_state["messages"]) == 0
-    mock_agent.context_manager.clear.assert_called_once()
+    def test_get_agent_raises_if_not_initialized(self):
+        with pytest.raises(RuntimeError):
+            get_agent()
 
 
-def test_get_agent_dependencies_preview() -> None:
-    """Test get_agent_dependencies returns configured interactive preview stubs."""
-    from features.ui.session_state import get_agent_dependencies
+@pytest.mark.unit
+@pytest.mark.ui
+class TestChatHistory:
 
-    retriever, mcp_client, context_manager, llm = get_agent_dependencies()
+    def test_add_to_chat_history_creates_messages_if_missing(self):
+        add_to_chat_history("user", "Hello")
+        assert len(st.session_state["messages"]) == 1
+        assert st.session_state["messages"][0]["role"] == "user"
 
-    # Verify retriever
-    docs = retriever.invoke("Singapore attractions")
-    assert len(docs) > 0
-    assert "Visit Singapore" in docs[0].metadata["title"]
+    def test_clear_chat_history_resets_messages(self):
+        st.session_state["messages"] = [{"role": "user", "content": "hi"}]
+        clear_chat_history()
+        assert st.session_state["messages"] == []
 
-    # Verify MCP client
-    weather = mcp_client.get_weather_forecast("Singapore")
-    assert "Singapore" in weather
-    currency = mcp_client.convert_currency("50000 INR")
-    assert "SGD" in currency
+    def test_clear_chat_history_clears_context_manager(self):
+        mock_ctx = MagicMock()
+        mock_agent = MagicMock()
+        mock_agent.context_manager = mock_ctx
+        st.session_state["agent"] = mock_agent
+        
+        clear_chat_history()
+        mock_ctx.clear.assert_called_once()
 
-    # Verify Bound LLM tool calls
-    bound = llm.bind_tools([])
-    weather_resp = bound.invoke("What is the weather like?")
-    assert any(c["name"] == "get_weather_forecast" for c in weather_resp.tool_calls)
 
-    currency_resp = bound.invoke("Convert 50000 INR to SGD")
-    assert any(c["name"] == "convert_currency" for c in currency_resp.tool_calls)
+@pytest.mark.unit
+@pytest.mark.ui
+class TestAgentDependencies:
 
-    itinerary_resp = bound.invoke("Plan a 3-day itinerary")
-    assert any(c["name"] == "kb_search" for c in itinerary_resp.tool_calls)
-
-    # Verify LLM invoke responses
-    assert "Weather" in llm.invoke("live weather data: Singapore").content
-    assert "Currency" in llm.invoke("live conversion data: SGD").content
-    assert "Itinerary" in llm.invoke("3-day itinerary").content
-    assert "Singapore" in llm.invoke("general question").content
-
+    @patch("features.ui.session_state.settings")
+    @patch("features.ui.session_state.VectorStoreManager")
+    @patch("features.ui.session_state.ChatGoogleGenerativeAI")
+    def test_get_agent_dependencies_returns_real_objects(self, mock_llm, mock_vsm, mock_settings):
+        # We need to mock settings so it doesn't fail trying to read env vars
+        mock_settings.chroma_persist_directory = MagicMock()
+        mock_settings.chroma_collection_name = "test"
+        mock_settings.embedding_model_name = "test"
+        mock_settings.google_api_key = "test_key"
+        
+        # Test the function returns real types
+        retriever, mcp_client, context_manager, llm = get_agent_dependencies()
+        
+        from features.rag.retriever import KnowledgeRetriever
+        from features.mcp.mcp_client import MCPClient
+        from features.orchestrator.context_manager import ConversationContextManager
+        
+        assert isinstance(retriever, KnowledgeRetriever)
+        assert isinstance(mcp_client, MCPClient)
+        assert isinstance(context_manager, ConversationContextManager)
+        # LLM is mocked

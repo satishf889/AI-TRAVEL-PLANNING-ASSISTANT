@@ -87,11 +87,12 @@ class TestCurrencyToolValidation:
         with pytest.raises((ValueError, NotImplementedError)):
             tool.convert(-100, "INR", "SGD")
 
-    def test_as_langchain_tool_raises_not_implemented(self) -> None:
-        """as_langchain_tool raises NotImplementedError until implemented."""
+    def test_as_langchain_tool_returns_object(self) -> None:
+        """as_langchain_tool returns a non-None object."""
         tool = CurrencyTool()
-        with pytest.raises(NotImplementedError):
-            tool.as_langchain_tool()
+        from langchain_core.tools import Tool
+        result = tool.as_langchain_tool()
+        assert isinstance(result, Tool)
 
 
 @pytest.mark.unit

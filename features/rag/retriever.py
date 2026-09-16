@@ -52,7 +52,25 @@ class KnowledgeRetriever:
             RuntimeError: If the vector store has not been initialised.
             ValueError: If query is empty.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        if not self.vector_store_manager.is_initialized():
+            raise RuntimeError("Vector store is not initialized")
+        if not query:
+            raise ValueError("Query cannot be empty")
+            
+        docs_and_scores = self.vector_store_manager._vector_store.similarity_search_with_score(query, k=self.top_k)
+        
+        results = []
+        for doc, score in docs_and_scores:
+            results.append(
+                RetrievalResult(
+                    content=doc.page_content,
+                    source_title=doc.metadata.get("source_title", "Unknown"),
+                    source_url=doc.metadata.get("source_url", ""),
+                    relevance_score=float(score),
+                    chunk_index=doc.metadata.get("chunk_index", 0),
+                )
+            )
+        return results
 
     def retrieve_with_fallback_message(self, query: str) -> tuple[list[RetrievalResult], str | None]:
         """Retrieve relevant chunks and provide a fallback message if none found.
@@ -68,7 +86,11 @@ class KnowledgeRetriever:
             Tuple of (results, fallback_message). fallback_message is None
             when relevant results are found, and a string when no results found.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        results = self.retrieve(query)
+        if not results:
+            from features.orchestrator.prompt_templates import FALLBACK_NO_KB_CONTENT
+            return [], FALLBACK_NO_KB_CONTENT
+        return results, None
 
     def format_context(self, results: list[RetrievalResult]) -> str:
         """Format retrieval results into a context string for the LLM prompt.
@@ -79,4 +101,35 @@ class KnowledgeRetriever:
         Returns:
             Formatted string with content and source citations.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        parts = []
+        for res in results:
+            parts.append(f"Source: {res.source_title}\nURL: {res.source_url}\n{res.content}")
+        return "\n\n".join(parts)
+
+    def invoke(self, query: str) -> list[object]:
+        """LangChain compatible invoke method returning Document objects.
+
+        Args:
+            query: The user's natural language question.
+
+        Returns:
+            List of LangChain Document instances with full source metadata.
+        """
+        from langchain_core.documents import Document
+
+        results = self.retrieve(query)
+        return [
+            Document(
+                page_content=res.content,
+                metadata={
+                    "title": res.source_title,
+                    "source": res.source_url,
+                    "source_title": res.source_title,
+                    "source_url": res.source_url,
+                    "relevance_score": res.relevance_score,
+                    "chunk_index": res.chunk_index,
+                },
+            )
+            for res in results
+        ]
+

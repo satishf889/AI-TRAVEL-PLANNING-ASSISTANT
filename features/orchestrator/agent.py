@@ -60,6 +60,20 @@ class TravelAgent:
         self.context_manager = context_manager
         self.llm = llm
 
+    def _extract_text(self, content: str | list[dict[str, Any]] | list[Any]) -> str:
+        """Extract text from LLM content which might be a string or a list of dicts."""
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            parts = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+                elif isinstance(block, str):
+                    parts.append(block)
+            return "".join(parts)
+        return str(content)
+
     def classify_intent(self, query: str) -> QueryIntent:
         """Classify the user's query to determine required information sources."""
         tools = [
@@ -130,9 +144,35 @@ class TravelAgent:
         self.context_manager.add_assistant_message(response.answer)
         return response
 
+    def _extract_doc_content(self, doc: Any) -> str:
+        """Extract text content from a document or retrieval result."""
+        if hasattr(doc, "page_content"):
+            return str(doc.page_content)
+        elif hasattr(doc, "content"):
+            return str(doc.content)
+        return str(doc)
+
+    def _extract_doc_source(self, doc: Any) -> dict[str, str]:
+        """Extract source metadata from a document or retrieval result."""
+        if hasattr(doc, "metadata") and isinstance(doc.metadata, dict):
+            title = doc.metadata.get("title") or doc.metadata.get("source_title") or "Unknown"
+            url = doc.metadata.get("source") or doc.metadata.get("source_url") or ""
+            return {"title": str(title), "url": str(url)}
+        elif hasattr(doc, "source_title") and hasattr(doc, "source_url"):
+            return {"title": str(doc.source_title), "url": str(doc.source_url)}
+        return {"title": "Unknown", "url": ""}
+
+    def _retrieve_docs(self, query: str) -> list[Any]:
+        """Retrieve documents from the retriever using invoke or retrieve."""
+        if hasattr(self.retriever, "invoke"):
+            return self.retriever.invoke(query)  # type: ignore[no-any-return]
+        elif hasattr(self.retriever, "retrieve"):
+            return self.retriever.retrieve(query)  # type: ignore[no-any-return]
+        return []
+
     def _handle_kb_query(self, query: str) -> AgentResponse:
         """Handle a query that only requires knowledge base retrieval."""
-        docs = self.retriever.invoke(query)
+        docs = self._retrieve_docs(query)
         if not docs:
             return AgentResponse(
                 answer="",
@@ -143,11 +183,11 @@ class TravelAgent:
                 fallback_message=FALLBACK_NO_KB_CONTENT
             )
 
-        context = "\\n".join(doc.page_content for doc in docs)
-        sources = [{"title": doc.metadata.get("title", "Unknown"), "url": doc.metadata.get("source", "")} for doc in docs]
+        context = "\n\n".join(self._extract_doc_content(doc) for doc in docs)
+        sources = [self._extract_doc_source(doc) for doc in docs]
 
         prompt = RAG_QA_PROMPT_TEMPLATE.format(context=context, question=query)
-        answer = self.llm.invoke(prompt).content
+        answer = self._extract_text(self.llm.invoke(prompt).content)
 
         return AgentResponse(
             answer=answer,
@@ -162,8 +202,8 @@ class TravelAgent:
         """Handle a query that requires weather MCP tool data."""
         try:
             weather = self.mcp_client.get_weather_forecast("Singapore")
-            prompt = f"Answer using this live weather data: {weather}\\nUser: {query}"
-            answer = self.llm.invoke(prompt).content
+            prompt = f"Answer using this live weather data: {weather}\nUser: {query}"
+            answer = self._extract_text(self.llm.invoke(prompt).content)
             return AgentResponse(
                 answer=answer,
                 intent=QueryIntent.MCP_WEATHER,
@@ -186,8 +226,8 @@ class TravelAgent:
         """Handle a query that requires currency conversion via MCP tool."""
         try:
             conversion = self.mcp_client.convert_currency(query)
-            prompt = f"Answer using this live conversion data: {conversion}\\nUser: {query}"
-            answer = self.llm.invoke(prompt).content
+            prompt = f"Answer using this live conversion data: {conversion}\nUser: {query}"
+            answer = self._extract_text(self.llm.invoke(prompt).content)
             return AgentResponse(
                 answer=answer,
                 intent=QueryIntent.MCP_CURRENCY,
@@ -208,9 +248,9 @@ class TravelAgent:
 
     def _handle_combined_query(self, query: str) -> AgentResponse:
         """Handle a query requiring both KB retrieval and MCP tool calls."""
-        docs = self.retriever.invoke(query)
-        context = "\\n".join(doc.page_content for doc in docs) if docs else "No specific destination facts found."
-        sources = [{"title": doc.metadata.get("title", "Unknown"), "url": doc.metadata.get("source", "")} for doc in docs]
+        docs = self._retrieve_docs(query)
+        context = "\n\n".join(self._extract_doc_content(doc) for doc in docs) if docs else "No specific destination facts found."
+        sources = [self._extract_doc_source(doc) for doc in docs]
 
         mcp_data = []
         tools_used = []
@@ -223,13 +263,13 @@ class TravelAgent:
         except Exception:
             has_fallback = True
 
-        mcp_context = "\\n".join(mcp_data)
+        mcp_context = "\n".join(mcp_data)
         prompt = COMBINED_RAG_MCP_PROMPT_TEMPLATE.format(
             kb_context=context,
             mcp_data=mcp_context,
             user_request=query
         )
-        answer = self.llm.invoke(prompt).content
+        answer = self._extract_text(self.llm.invoke(prompt).content)
 
         return AgentResponse(
             answer=answer,
@@ -239,3 +279,4 @@ class TravelAgent:
             has_fallback=has_fallback,
             fallback_message=None
         )
+

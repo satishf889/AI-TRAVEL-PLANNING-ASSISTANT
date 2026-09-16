@@ -163,7 +163,13 @@ class WeatherTool:
         Returns:
             LangChain Tool instance with name, description, and invocation function.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        from langchain_core.tools import Tool
+        
+        return Tool(
+            name=self.TOOL_NAME,
+            description=self.TOOL_DESCRIPTION,
+            func=lambda x: str(self.get_forecast()),
+        )
 
     @staticmethod
     def _wmo_code_to_description(wmo_code: int) -> tuple[str, bool]:

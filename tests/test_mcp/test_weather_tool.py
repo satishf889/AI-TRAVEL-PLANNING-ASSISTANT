@@ -109,9 +109,9 @@ class TestWeatherToolLangChainAdapter:
     def test_as_langchain_tool_returns_object(self) -> None:
         """as_langchain_tool returns a non-None object."""
         tool = WeatherTool()
-        # Will raise NotImplementedError until implemented — expected in Red phase
-        with pytest.raises(NotImplementedError):
-            tool.as_langchain_tool()
+        from langchain_core.tools import Tool
+        result = tool.as_langchain_tool()
+        assert isinstance(result, Tool)
 
 
 @pytest.mark.unit
