@@ -51,14 +51,14 @@ class DocumentChunker:
             List of DocumentChunk instances with source metadata preserved.
         """
         from langchain_text_splitters import RecursiveCharacterTextSplitter
-        
+
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
         )
-        
+
         text_chunks = splitter.split_text(document.content)
-        
+
         doc_chunks = []
         for i, text in enumerate(text_chunks):
             doc_chunks.append(

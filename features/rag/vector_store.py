@@ -56,12 +56,12 @@ class VectorStoreManager:
         """
         if not chunks:
             raise ValueError("chunks list cannot be empty")
-            
+
         embeddings = HuggingFaceEmbeddings(
             model_name=self.embedding_model_name,
             model_kwargs={"device": self.embedding_device}
         )
-        
+
         texts = [chunk.content for chunk in chunks]
         metadatas = [
             {
@@ -71,9 +71,9 @@ class VectorStoreManager:
             }
             for chunk in chunks
         ]
-        
+
         self.persist_directory.mkdir(parents=True, exist_ok=True)
-        
+
         self._vector_store = Chroma.from_texts(
             texts=texts,
             embedding=embeddings,
@@ -90,12 +90,12 @@ class VectorStoreManager:
         """
         if not self.persist_directory.exists():
             raise FileNotFoundError(f"Persist directory not found: {self.persist_directory}")
-            
+
         embeddings = HuggingFaceEmbeddings(
             model_name=self.embedding_model_name,
             model_kwargs={"device": self.embedding_device}
         )
-        
+
         self._vector_store = Chroma(
             collection_name=self.collection_name,
             embedding_function=embeddings,

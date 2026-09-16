@@ -15,8 +15,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from features.cache.response_cache import ResponseCache
+from features.orchestrator.pii_sanitizer import PIISanitizer
 from features.orchestrator.prompt_templates import (
     COMBINED_RAG_MCP_PROMPT_TEMPLATE,
+    CONVERSATIONAL_PROMPT_TEMPLATE,
     FALLBACK_MCP_TOOL_FAILURE,
     FALLBACK_NO_KB_CONTENT,
     RAG_QA_PROMPT_TEMPLATE,
@@ -30,6 +33,7 @@ class QueryIntent(Enum):
     MCP_WEATHER = "mcp_weather"   # Only weather MCP tool needed
     MCP_CURRENCY = "mcp_currency" # Only currency MCP tool needed
     COMBINED = "combined"          # Both KB and one or more MCP tools needed
+    CONVERSATIONAL = "conversational"  # Greeting, small talk, or general introduction
     UNKNOWN = "unknown"            # Cannot classify — agent decides
 
 
@@ -48,17 +52,26 @@ class AgentResponse:
 class TravelAgent:
     """The main LangChain-powered travel planning agent."""
 
+    GREETING_KEYWORDS = {
+        "hi", "hello", "hey", "hola", "greetings", "good morning",
+        "good afternoon", "good evening", "how are you", "who are you",
+        "what can you do", "help", "thanks", "thank you", "bye", "goodbye"
+    }
+
     def __init__(
         self,
         retriever: Any,
         mcp_client: Any,
         context_manager: Any,
         llm: Any,
+        cache: Any = None,
     ) -> None:
         self.retriever = retriever
         self.mcp_client = mcp_client
         self.context_manager = context_manager
         self.llm = llm
+        self.cache = cache or ResponseCache(redis_enabled=False)
+
 
     def _extract_text(self, content: str | list[dict[str, Any]] | list[Any]) -> str:
         """Extract text from LLM content which might be a string or a list of dicts."""
@@ -76,6 +89,14 @@ class TravelAgent:
 
     def classify_intent(self, query: str) -> QueryIntent:
         """Classify the user's query to determine required information sources."""
+        cleaned_query = query.strip().lower()
+        # Fast check for simple conversational greetings
+        if cleaned_query in self.GREETING_KEYWORDS or any(
+            cleaned_query.startswith(g + " ") or cleaned_query.endswith(" " + g)
+            for g in ["hi", "hello", "hey"]
+        ):
+            return QueryIntent.CONVERSATIONAL
+
         tools = [
             {
                 "type": "function",
@@ -100,49 +121,151 @@ class TravelAgent:
             }
         ]
 
-        # In a real LangChain setup, bind_tools returns a runnable.
-        llm_with_tools = self.llm.bind_tools(tools)
-        response = llm_with_tools.invoke(query)
-
-        tool_calls = getattr(response, "tool_calls", [])
-        tool_names = [call.get("name", call) if isinstance(call, dict) else call.name for call in tool_calls]
-
-        if not tool_names:
+        if not hasattr(self.llm, "bind_tools"):
             return QueryIntent.KB_ONLY
 
-        has_weather = "get_weather_forecast" in tool_names
-        has_currency = "convert_currency" in tool_names
-        has_kb = "kb_search" in tool_names
+        try:
+            llm_with_tools = self.llm.bind_tools(tools)
+            response = llm_with_tools.invoke(query)
 
-        if has_weather and has_kb:
-            return QueryIntent.COMBINED
-        elif has_currency and has_kb:
-            return QueryIntent.COMBINED
-        elif has_weather and not has_currency:
-            return QueryIntent.MCP_WEATHER
-        elif has_currency and not has_weather:
-            return QueryIntent.MCP_CURRENCY
+            tool_calls = getattr(response, "tool_calls", [])
+            tool_names = [
+                call.get("name", call) if isinstance(call, dict) else getattr(call, "name", str(call))
+                for call in tool_calls
+            ]
 
-        return QueryIntent.COMBINED
+            if not tool_names:
+                return QueryIntent.KB_ONLY
+
+            has_weather = "get_weather_forecast" in tool_names
+            has_currency = "convert_currency" in tool_names
+            has_kb = "kb_search" in tool_names
+
+            if has_weather and has_kb:
+                return QueryIntent.COMBINED
+            elif has_currency and has_kb:
+                return QueryIntent.COMBINED
+            elif has_weather and not has_currency:
+                return QueryIntent.MCP_WEATHER
+            elif has_currency and not has_weather:
+                return QueryIntent.MCP_CURRENCY
+
+            return QueryIntent.COMBINED
+        except Exception:
+            return QueryIntent.KB_ONLY
+
+    def _get_history_text(self) -> str:
+        """Format recent conversation history as a string."""
+        if hasattr(self.context_manager, "get_history_for_langchain"):
+            history = self.context_manager.get_history_for_langchain()
+            if not history:
+                return "No previous conversation history."
+            lines = [f"{role.capitalize()}: {content}" for role, content in history[-6:]]
+            return "\n".join(lines)
+        return "No previous conversation history."
 
     def process_query(self, query: str) -> AgentResponse:
-        """Process a user query and return a grounded, attributed response."""
-        self.context_manager.update_preferences(query)
-        self.context_manager.add_user_message(query)
+        """Process a user query synchronously (consumes stream)."""
+        metadata: dict[str, Any] = {}
+        stream = self.stream_query(query, metadata)
+        answer = "".join(list(stream))
 
-        intent = self.classify_intent(query)
+        # Add to history
+        self.context_manager.add_assistant_message(answer)
 
-        if intent == QueryIntent.KB_ONLY:
-            response = self._handle_kb_query(query)
+        return AgentResponse(
+            answer=answer,
+            intent=metadata.get("intent", QueryIntent.UNKNOWN),
+            kb_sources_used=metadata.get("kb_sources_used", []),
+            mcp_tools_used=metadata.get("mcp_tools_used", []),
+            has_fallback=metadata.get("has_fallback", False),
+            fallback_message=metadata.get("fallback_message")
+        )
+
+    def stream_query(self, query: str, metadata_out: dict[str, Any]) -> Any:
+        """Stream a user query and populate metadata_out with sources and intent."""
+        # 1. Sanitize query to scrub any PII before processing or storing
+        clean_query = PIISanitizer.sanitize(query)
+
+        self.context_manager.update_preferences(clean_query)
+        self.context_manager.add_user_message(clean_query)
+
+        # 2. Check response cache for existing answer
+        if hasattr(self, "cache") and self.cache is not None:
+            cached_item = self.cache.get(clean_query)
+            if cached_item and isinstance(cached_item, dict):
+                metadata_out["intent"] = QueryIntent(cached_item.get("intent", QueryIntent.KB_ONLY.value))
+                metadata_out["kb_sources_used"] = cached_item.get("kb_sources_used", [])
+                metadata_out["mcp_tools_used"] = cached_item.get("mcp_tools_used", [])
+                metadata_out["has_fallback"] = cached_item.get("has_fallback", False)
+                metadata_out["fallback_message"] = cached_item.get("fallback_message")
+                yield cached_item.get("answer", "")
+                return
+
+        intent = self.classify_intent(clean_query)
+        metadata_out["intent"] = intent
+        metadata_out["kb_sources_used"] = []
+        metadata_out["mcp_tools_used"] = []
+        metadata_out["has_fallback"] = False
+        metadata_out["fallback_message"] = None
+
+        prompt = ""
+
+        if intent == QueryIntent.CONVERSATIONAL:
+            prompt = self._prepare_conversational_query(clean_query)
+        elif intent == QueryIntent.KB_ONLY:
+            prompt = self._prepare_kb_query(clean_query, metadata_out)
         elif intent == QueryIntent.MCP_WEATHER:
-            response = self._handle_weather_query(query)
+            prompt = self._prepare_weather_query(clean_query, metadata_out)
         elif intent == QueryIntent.MCP_CURRENCY:
-            response = self._handle_currency_query(query)
+            prompt = self._prepare_currency_query(clean_query, metadata_out)
         else:
-            response = self._handle_combined_query(query)
+            prompt = self._prepare_combined_query(clean_query, metadata_out)
 
-        self.context_manager.add_assistant_message(response.answer)
-        return response
+        if metadata_out.get("has_fallback") and metadata_out.get("fallback_message"):
+            yield metadata_out["fallback_message"]
+            return
+
+        if not prompt:
+            return
+
+        # Check if LLM supports streaming
+        handled = False
+        accumulated_answer: list[str] = []
+
+        if hasattr(self.llm, "stream"):
+            try:
+                for chunk in self.llm.stream(prompt):
+                    handled = True
+                    text = self._extract_text(chunk.content) if hasattr(chunk, "content") else str(chunk)
+                    if text:
+                        accumulated_answer.append(text)
+                        yield text
+            except Exception:
+                handled = False
+
+        if not handled and hasattr(self.llm, "invoke"):
+            response = self.llm.invoke(prompt)
+            text = self._extract_text(response.content) if hasattr(response, "content") else str(response)
+            if text:
+                accumulated_answer.append(text)
+                yield text
+
+        # Cache completed response
+        full_text = "".join(accumulated_answer)
+        if full_text and hasattr(self, "cache") and self.cache is not None:
+            self.cache.set(
+                clean_query,
+                {
+                    "answer": full_text,
+                    "intent": intent.value,
+                    "kb_sources_used": metadata_out.get("kb_sources_used", []),
+                    "mcp_tools_used": metadata_out.get("mcp_tools_used", []),
+                    "has_fallback": metadata_out.get("has_fallback", False),
+                    "fallback_message": metadata_out.get("fallback_message"),
+                },
+            )
+
 
     def _extract_doc_content(self, doc: Any) -> str:
         """Extract text content from a document or retrieval result."""
@@ -170,113 +293,66 @@ class TravelAgent:
             return self.retriever.retrieve(query)  # type: ignore[no-any-return]
         return []
 
-    def _handle_kb_query(self, query: str) -> AgentResponse:
-        """Handle a query that only requires knowledge base retrieval."""
+    def _prepare_conversational_query(self, query: str) -> str:
+        history = self._get_history_text()
+        return CONVERSATIONAL_PROMPT_TEMPLATE.format(history=history, message=query)
+
+    def _prepare_kb_query(self, query: str, metadata_out: dict[str, Any]) -> str:
         docs = self._retrieve_docs(query)
         if not docs:
-            return AgentResponse(
-                answer="",
-                intent=QueryIntent.KB_ONLY,
-                kb_sources_used=[],
-                mcp_tools_used=[],
-                has_fallback=True,
-                fallback_message=FALLBACK_NO_KB_CONTENT
-            )
+            metadata_out["has_fallback"] = True
+            metadata_out["fallback_message"] = FALLBACK_NO_KB_CONTENT
+            return ""
 
         context = "\n\n".join(self._extract_doc_content(doc) for doc in docs)
-        sources = [self._extract_doc_source(doc) for doc in docs]
+        history = self._get_history_text()
+        metadata_out["kb_sources_used"] = [self._extract_doc_source(doc) for doc in docs]
+        return RAG_QA_PROMPT_TEMPLATE.format(context=context, history=history, question=query)
 
-        prompt = RAG_QA_PROMPT_TEMPLATE.format(context=context, question=query)
-        answer = self._extract_text(self.llm.invoke(prompt).content)
-
-        return AgentResponse(
-            answer=answer,
-            intent=QueryIntent.KB_ONLY,
-            kb_sources_used=sources,
-            mcp_tools_used=[],
-            has_fallback=False,
-            fallback_message=None
-        )
-
-    def _handle_weather_query(self, query: str) -> AgentResponse:
-        """Handle a query that requires weather MCP tool data."""
+    def _prepare_weather_query(self, query: str, metadata_out: dict[str, Any]) -> str:
         try:
             weather = self.mcp_client.get_weather_forecast("Singapore")
-            prompt = f"Answer using this live weather data: {weather}\nUser: {query}"
-            answer = self._extract_text(self.llm.invoke(prompt).content)
-            return AgentResponse(
-                answer=answer,
-                intent=QueryIntent.MCP_WEATHER,
-                kb_sources_used=[],
-                mcp_tools_used=["get_weather_forecast"],
-                has_fallback=False,
-                fallback_message=None
-            )
+            metadata_out["mcp_tools_used"] = ["get_weather_forecast"]
+            return f"Answer using this live weather data: {weather}\nUser: {query}"
         except Exception:
-            return AgentResponse(
-                answer="",
-                intent=QueryIntent.MCP_WEATHER,
-                kb_sources_used=[],
-                mcp_tools_used=[],
-                has_fallback=True,
-                fallback_message=FALLBACK_MCP_TOOL_FAILURE.format(tool_type="weather", fallback_source="Open-Meteo")
+            metadata_out["has_fallback"] = True
+            metadata_out["fallback_message"] = FALLBACK_MCP_TOOL_FAILURE.format(
+                tool_type="weather", fallback_source="Open-Meteo"
             )
+            return ""
 
-    def _handle_currency_query(self, query: str) -> AgentResponse:
-        """Handle a query that requires currency conversion via MCP tool."""
+    def _prepare_currency_query(self, query: str, metadata_out: dict[str, Any]) -> str:
         try:
             conversion = self.mcp_client.convert_currency(query)
-            prompt = f"Answer using this live conversion data: {conversion}\nUser: {query}"
-            answer = self._extract_text(self.llm.invoke(prompt).content)
-            return AgentResponse(
-                answer=answer,
-                intent=QueryIntent.MCP_CURRENCY,
-                kb_sources_used=[],
-                mcp_tools_used=["convert_currency"],
-                has_fallback=False,
-                fallback_message=None
-            )
+            metadata_out["mcp_tools_used"] = ["convert_currency"]
+            return f"Answer using this live conversion data: {conversion}\nUser: {query}"
         except Exception:
-            return AgentResponse(
-                answer="",
-                intent=QueryIntent.MCP_CURRENCY,
-                kb_sources_used=[],
-                mcp_tools_used=[],
-                has_fallback=True,
-                fallback_message=FALLBACK_MCP_TOOL_FAILURE.format(tool_type="currency", fallback_source="Frankfurter")
+            metadata_out["has_fallback"] = True
+            metadata_out["fallback_message"] = FALLBACK_MCP_TOOL_FAILURE.format(
+                tool_type="currency", fallback_source="Frankfurter"
             )
+            return ""
 
-    def _handle_combined_query(self, query: str) -> AgentResponse:
-        """Handle a query requiring both KB retrieval and MCP tool calls."""
+    def _prepare_combined_query(self, query: str, metadata_out: dict[str, Any]) -> str:
         docs = self._retrieve_docs(query)
         context = "\n\n".join(self._extract_doc_content(doc) for doc in docs) if docs else "No specific destination facts found."
-        sources = [self._extract_doc_source(doc) for doc in docs]
+        metadata_out["kb_sources_used"] = [self._extract_doc_source(doc) for doc in docs]
 
         mcp_data = []
-        tools_used = []
-        has_fallback = False
-
         try:
             weather = self.mcp_client.get_weather_forecast("Singapore")
             mcp_data.append(f"Weather: {weather}")
-            tools_used.append("get_weather_forecast")
+            metadata_out["mcp_tools_used"].append("get_weather_forecast")
         except Exception:
-            has_fallback = True
+            metadata_out["has_fallback"] = True
 
         mcp_context = "\n".join(mcp_data)
-        prompt = COMBINED_RAG_MCP_PROMPT_TEMPLATE.format(
+        history = self._get_history_text()
+        return COMBINED_RAG_MCP_PROMPT_TEMPLATE.format(
             kb_context=context,
             mcp_data=mcp_context,
+            history=history,
             user_request=query
         )
-        answer = self._extract_text(self.llm.invoke(prompt).content)
 
-        return AgentResponse(
-            answer=answer,
-            intent=QueryIntent.COMBINED,
-            kb_sources_used=sources,
-            mcp_tools_used=tools_used,
-            has_fallback=has_fallback,
-            fallback_message=None
-        )
 

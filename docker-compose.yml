@@ -14,13 +14,16 @@ services:
       - "8501:8501"
     env_file:
       - .env
+    environment:
+      - REDIS_HOST=redis
     volumes:
       # Persist vector store data across container restarts
       - ./chroma_db:/app/chroma_db
-      # Mount knowledge base for easy updates without rebuild
       - ./knowledge_base:/app/knowledge_base
     depends_on:
       - chromadb
+      - redis
+
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8501/_stcore/health" ]
@@ -30,6 +33,19 @@ services:
       start_period: 60s
     networks:
       - travel_net
+
+  # ─────────────────────────────────────────────
+  # Redis Cache Server
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ai_travel_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - travel_net
+
 
   # ─────────────────────────────────────────────
   # ChromaDB Vector Store Server (optional standalone mode)

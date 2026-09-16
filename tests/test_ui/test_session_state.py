@@ -27,14 +27,14 @@ class TestSessionStateInit:
 
     @patch("features.ui.session_state.get_agent_dependencies")
     def test_initialise_creates_empty_messages(self, mock_get_deps):
-        mock_get_deps.return_value = (MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        mock_get_deps.return_value = (MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock())
         initialise_session_state()
         assert "messages" in st.session_state
         assert st.session_state["messages"] == []
 
     @patch("features.ui.session_state.get_agent_dependencies")
     def test_initialise_creates_agent(self, mock_get_deps):
-        mock_get_deps.return_value = (MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        mock_get_deps.return_value = (MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock())
         initialise_session_state()
         assert "agent" in st.session_state
         assert st.session_state["agent"] is not None
@@ -63,7 +63,7 @@ class TestChatHistory:
         mock_agent = MagicMock()
         mock_agent.context_manager = mock_ctx
         st.session_state["agent"] = mock_agent
-        
+
         clear_chat_history()
         mock_ctx.clear.assert_called_once()
 
@@ -74,22 +74,40 @@ class TestAgentDependencies:
 
     @patch("features.ui.session_state.settings")
     @patch("features.ui.session_state.VectorStoreManager")
-    @patch("features.ui.session_state.ChatGoogleGenerativeAI")
+    @patch("features.ui.session_state.AzureChatOpenAI")
     def test_get_agent_dependencies_returns_real_objects(self, mock_llm, mock_vsm, mock_settings):
         # We need to mock settings so it doesn't fail trying to read env vars
-        mock_settings.chroma_persist_directory = MagicMock()
+        mock_settings.get_chroma_persist_path.return_value = MagicMock()
         mock_settings.chroma_collection_name = "test"
         mock_settings.embedding_model_name = "test"
-        mock_settings.google_api_key = "test_key"
-        
+        mock_settings.embedding_device = "cpu"
+        mock_settings.retrieval_top_k = 5
+        mock_settings.weather_api_base_url = "https://api.open-meteo.com/v1"
+        mock_settings.destination_latitude = 1.3521
+        mock_settings.destination_longitude = 103.8198
+        mock_settings.destination_city = "Singapore"
+        mock_settings.currency_api_base_url = "https://api.frankfurter.app"
+        mock_settings.azure_openai_api_key = "test_key"
+        mock_settings.azure_openai_endpoint = "https://test.openai.azure.com/"
+        mock_settings.azure_openai_api_version = "2024-08-01-preview"
+        mock_settings.azure_openai_deployment_name = "gpt-5-mini"
+        mock_settings.azure_openai_temperature = 0.3
+        mock_settings.azure_openai_max_tokens = 4096
+        mock_settings.redis_enabled = False
+        mock_settings.redis_host = "localhost"
+        mock_settings.redis_port = 6379
+        mock_settings.cache_ttl_seconds = 3600
+
         # Test the function returns real types
-        retriever, mcp_client, context_manager, llm = get_agent_dependencies()
-        
-        from features.rag.retriever import KnowledgeRetriever
+        retriever, mcp_client, context_manager, llm, cache = get_agent_dependencies()
+
+        from features.cache.response_cache import ResponseCache
         from features.mcp.mcp_client import MCPClient
         from features.orchestrator.context_manager import ConversationContextManager
-        
+        from features.rag.retriever import KnowledgeRetriever
+
         assert isinstance(retriever, KnowledgeRetriever)
         assert isinstance(mcp_client, MCPClient)
         assert isinstance(context_manager, ConversationContextManager)
-        # LLM is mocked
+        assert isinstance(cache, ResponseCache)
+

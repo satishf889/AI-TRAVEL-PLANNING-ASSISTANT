@@ -29,7 +29,6 @@ class TestSystemPrompt:
 
     def test_system_prompt_prohibits_fabrication(self) -> None:
         """System prompt instructs model not to fabricate information."""
-        prohibit_keywords = ["not", "cannot", "do not", "never", "without"]
         fabricate_keywords = ["fabricate", "invent", "made up", "hallucinate"]
         prompt_lower = SYSTEM_PROMPT.lower()
         has_prohibition = any(kw in prompt_lower for kw in fabricate_keywords)
@@ -90,8 +89,29 @@ class TestFallbackMessages:
 
     def test_kb_fallback_suggests_external_source(self) -> None:
         """KB fallback message directs user to external sources."""
-        assert "visitsingapore" in FALLBACK_NO_KB_CONTENT.lower() or "wikivoyage" in FALLBACK_NO_KB_CONTENT.lower()
+        fallback_lower = FALLBACK_NO_KB_CONTENT.lower()
+        assert "visitsingapore" in fallback_lower or "wikivoyage" in fallback_lower
 
     def test_mcp_fallback_has_tool_type_placeholder(self) -> None:
         """MCP tool failure fallback has {tool_type} placeholder."""
         assert "{tool_type}" in FALLBACK_MCP_TOOL_FAILURE
+
+
+@pytest.mark.unit
+@pytest.mark.orchestrator
+class TestScopeBoundaryPromptRules:
+    """Tests that all prompts include the strict out-of-scope denial rule."""
+
+    def test_system_prompt_has_strict_denial(self) -> None:
+        """System prompt contains the exact static denial message for off-topic requests."""
+        assert "I can only help for Singapore travel, no other thing." in SYSTEM_PROMPT
+
+    def test_rag_qa_prompt_has_strict_denial(self) -> None:
+        """RAG Q&A prompt contains the exact static denial message for off-topic requests."""
+        assert "I can only help for Singapore travel, no other thing." in RAG_QA_PROMPT_TEMPLATE
+
+    def test_combined_prompt_has_strict_denial(self) -> None:
+        """Combined prompt contains the exact static denial message for off-topic requests."""
+        denial_msg = "I can only help for Singapore travel, no other thing."
+        assert denial_msg in COMBINED_RAG_MCP_PROMPT_TEMPLATE
+

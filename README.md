@@ -4,7 +4,7 @@ A context-aware AI assistant for planning trips to **Singapore**, combining a do
 
 > **Assignment:** Developer Assignment — AI Travel Planning Assistant
 > **Destination:** Singapore
-> **Stack:** Python 3.11 · LangChain · Google Gemini Pro · ChromaDB · Streamlit · Docker
+> **Stack:** Python 3.11 · LangChain · Azure OpenAI (gpt-5-mini) · ChromaDB · Streamlit · Docker
 
 ---
 
@@ -36,7 +36,7 @@ User Query
 │ │  DB  │   │ Currency Tool│  → Frankfurter API (free)   │
 │ └──────┘   └──────────────┘                              │
 │                                                           │
-│           Google Gemini Pro LLM                          │
+│           Azure OpenAI LLM (gpt-5-mini)                   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -57,7 +57,7 @@ User Query
 | Language | Python 3.11+ |
 | UI | Streamlit |
 | AI Orchestration | LangChain |
-| LLM | Google Gemini Pro (`gemini-1.5-pro`) |
+| LLM | Azure OpenAI (`gpt-5-mini`) |
 | Embeddings | HuggingFace `sentence-transformers/all-MiniLM-L6-v2` (local, free) |
 | Vector Store | ChromaDB (persisted to disk) |
 | MCP Weather | Open-Meteo API (free, no key) |
@@ -164,14 +164,14 @@ AI-TRAVEL-PLANNING-ASSISTANT/
 
 ### Prerequisites
 - Docker + Docker Compose
-- Google API key (for Gemini Pro)
+- Azure OpenAI API key and endpoint (with `gpt-5-mini` model deployment)
 
 ### 1. Clone and configure
 ```bash
 git clone <repo-url>
 cd AI-TRAVEL-PLANNING-ASSISTANT
 cp .env.example .env
-# Edit .env and set your GOOGLE_API_KEY
+# Edit .env and set your AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, etc.
 ```
 
 ### 2. Populate knowledge base

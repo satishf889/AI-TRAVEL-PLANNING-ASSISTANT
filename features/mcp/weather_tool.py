@@ -164,7 +164,7 @@ class WeatherTool:
             LangChain Tool instance with name, description, and invocation function.
         """
         from langchain_core.tools import Tool
-        
+
         return Tool(
             name=self.TOOL_NAME,
             description=self.TOOL_DESCRIPTION,
