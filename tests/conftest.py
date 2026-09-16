@@ -5,7 +5,7 @@ are mocked here to ensure tests are fast, deterministic, and offline.
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -14,8 +14,7 @@ from features.mcp.mcp_client import MCPClient
 from features.mcp.weather_tool import WeatherCondition, WeatherForecast, WeatherTool
 from features.orchestrator.context_manager import ConversationContextManager
 from features.rag.chunker import DocumentChunk
-from features.rag.document_loader import DocumentLoader, KnowledgeDocument
-
+from features.rag.document_loader import KnowledgeDocument
 
 # ─── Sample Data Fixtures ─────────────────────────────────────────────────────
 

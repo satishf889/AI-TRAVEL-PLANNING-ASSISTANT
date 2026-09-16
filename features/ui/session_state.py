@@ -6,7 +6,6 @@ Centralises all Streamlit session state initialisation and access
 to avoid scattered st.session_state references throughout the codebase.
 """
 
-import streamlit as st
 
 from features.orchestrator.agent import TravelAgent
 

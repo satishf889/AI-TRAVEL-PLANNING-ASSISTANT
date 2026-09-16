@@ -14,6 +14,8 @@ This document tracks the progress of features for the AI Travel Planning Assista
 
 ## Completed Features
 
+- [x] Orchestrator Module (agent logic and context)
+
 - [x] Initial project setup
 - [x] Basic MCP tools configuration (Currency, Weather)
 
