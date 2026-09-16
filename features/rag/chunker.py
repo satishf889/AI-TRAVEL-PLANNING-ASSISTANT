@@ -8,6 +8,8 @@ Requirements satisfied: RAG Requirement 2 (divide content into meaningful chunks
 
 from dataclasses import dataclass
 
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
 from features.rag.document_loader import KnowledgeDocument
 
 
@@ -50,7 +52,21 @@ class DocumentChunker:
         Returns:
             List of DocumentChunk instances with source metadata preserved.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap
+        )
+        texts = splitter.split_text(document.content)
+        chunks = []
+        for i, text in enumerate(texts):
+            chunks.append(DocumentChunk(
+                content=text,
+                source_title=document.source_title,
+                source_url=document.source_url,
+                chunk_index=i,
+                total_chunks=len(texts)
+            ))
+        return chunks
 
     def chunk_documents(self, documents: list[KnowledgeDocument]) -> list[DocumentChunk]:
         """Split multiple documents into chunks.
@@ -61,4 +77,7 @@ class DocumentChunker:
         Returns:
             Flat list of all DocumentChunk instances from all documents.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        all_chunks = []
+        for doc in documents:
+            all_chunks.extend(self.chunk_document(doc))
+        return all_chunks

@@ -14,6 +14,7 @@ This document tracks the progress of features for the AI Travel Planning Assista
 
 ## Completed Features
 
+- [x] RAG (Destination Knowledge Assistant)
 - [x] Orchestrator Module (agent logic and context)
 
 - [x] Initial project setup

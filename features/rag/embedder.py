@@ -6,6 +6,8 @@ Uses the all-MiniLM-L6-v2 model which runs locally — no API key required.
 Requirements satisfied: RAG Requirement 3 (generate embeddings for chunks).
 """
 
+from langchain_huggingface import HuggingFaceEmbeddings
+
 from features.rag.chunker import DocumentChunk
 
 
@@ -36,7 +38,12 @@ class Embedder:
         Returns:
             HuggingFaceEmbeddings instance configured with the specified model.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        if self._model is None:
+            self._model = HuggingFaceEmbeddings(
+                model_name=self.model_name,
+                model_kwargs={"device": self.device}
+            )
+        return self._model
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of text strings.
@@ -47,7 +54,8 @@ class Embedder:
         Returns:
             List of embedding vectors (each is a list of floats).
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        model = self.get_langchain_embeddings()
+        return model.embed_documents(texts)
 
     def embed_chunks(self, chunks: list[DocumentChunk]) -> list[list[float]]:
         """Generate embeddings for a list of DocumentChunks.
@@ -58,4 +66,5 @@ class Embedder:
         Returns:
             List of embedding vectors corresponding to each chunk's content.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        texts = [chunk.content for chunk in chunks]
+        return self.embed_texts(texts)

@@ -5,6 +5,7 @@ All tests should initially FAIL (Red phase). Implement document_loader.py to mak
 """
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -116,3 +117,55 @@ class TestLoadAll:
         for doc in docs:
             assert doc.source_title, f"Missing source_title in {doc.file_path}"
             assert doc.source_url, f"Missing source_url in {doc.file_path}"
+
+
+@pytest.mark.unit
+@pytest.mark.rag
+class TestPdfLoader:
+    """Tests for PDF document loading."""
+
+    @patch("features.rag.document_loader.fitz")
+    def test_load_pdf_returns_knowledge_document(
+        self, mock_fitz: MagicMock, tmp_path: Path
+    ) -> None:
+        """load_pdf returns a KnowledgeDocument with correct content and metadata."""
+        mock_doc = MagicMock()
+        mock_page = MagicMock()
+        mock_page.get_text.return_value = "---\nsource_title: PDF Title\nsource_url: https://pdf.com\n---\nPDF Content"
+        mock_doc.__iter__.return_value = [mock_page]
+        mock_fitz.open.return_value.__enter__.return_value = mock_doc
+
+        loader = DocumentLoader(knowledge_base_dir=tmp_path)
+        pdf_file = tmp_path / "test.pdf"
+
+        doc = loader.load_pdf(pdf_file)
+
+        assert isinstance(doc, KnowledgeDocument)
+        assert doc.source_title == "PDF Title"
+        assert doc.source_url == "https://pdf.com"
+        assert "PDF Content" in doc.content
+
+
+@pytest.mark.unit
+@pytest.mark.rag
+class TestHtmlLoader:
+    """Tests for HTML document loading."""
+
+    def test_load_html_returns_knowledge_document(
+        self, tmp_path: Path
+    ) -> None:
+        """load_html returns a KnowledgeDocument with correct content and metadata."""
+        loader = DocumentLoader(knowledge_base_dir=tmp_path)
+        html_file = tmp_path / "test.html"
+        html_file.write_text(
+            '<html><head><title>HTML Title</title><meta name="source_url" content="https://html.com"></head>'
+            '<body><p>HTML Content</p></body></html>'
+        )
+
+        doc = loader.load_html(html_file)
+
+        assert isinstance(doc, KnowledgeDocument)
+        assert doc.source_title == "HTML Title"
+        assert doc.source_url == "https://html.com"
+        assert "HTML Content" in doc.content
+

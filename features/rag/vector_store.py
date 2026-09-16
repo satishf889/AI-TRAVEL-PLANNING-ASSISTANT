@@ -8,7 +8,11 @@ Requirements satisfied: RAG Requirement 4 (store embeddings in a vector store).
 
 from pathlib import Path
 
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+
 from features.rag.chunker import DocumentChunk
+from features.rag.embedder import Embedder
 
 
 class VectorStoreManager:
@@ -51,7 +55,31 @@ class VectorStoreManager:
         Raises:
             ValueError: If chunks list is empty.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        if not chunks:
+            raise ValueError("Cannot create vector store from an empty list of chunks.")
+
+        docs = []
+        for chunk in chunks:
+            docs.append(Document(
+                page_content=chunk.content,
+                metadata={
+                    "source_title": chunk.source_title,
+                    "source_url": chunk.source_url,
+                    "chunk_index": chunk.chunk_index
+                }
+            ))
+
+        embedder = Embedder(
+            model_name=self.embedding_model_name,
+            device=self.embedding_device
+        ).get_langchain_embeddings()
+
+        self._vector_store = Chroma.from_documents(
+            documents=docs,
+            embedding=embedder,
+            persist_directory=str(self.persist_directory),
+            collection_name=self.collection_name
+        )
 
     def load(self) -> None:
         """Load an existing persisted vector store from disk.
@@ -59,7 +87,19 @@ class VectorStoreManager:
         Raises:
             FileNotFoundError: If the persist directory does not contain a valid store.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        if not self.persist_directory.exists() or not any(self.persist_directory.iterdir()):
+            raise FileNotFoundError("Persist directory does not exist or is empty.")
+
+        embedder = Embedder(
+            model_name=self.embedding_model_name,
+            device=self.embedding_device
+        ).get_langchain_embeddings()
+
+        self._vector_store = Chroma(
+            collection_name=self.collection_name,
+            embedding_function=embedder,
+            persist_directory=str(self.persist_directory)
+        )
 
     def get_retriever(self, top_k: int = 5) -> object:
         """Return a LangChain-compatible retriever for the vector store.
@@ -73,7 +113,9 @@ class VectorStoreManager:
         Raises:
             RuntimeError: If the vector store has not been created or loaded.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        if not self.is_initialized():
+            raise RuntimeError("Vector store has not been created or loaded.")
+        return self._vector_store.as_retriever(search_kwargs={"k": top_k})
 
     def is_initialized(self) -> bool:
         """Check whether the vector store has been loaded or created.
@@ -81,7 +123,7 @@ class VectorStoreManager:
         Returns:
             True if the vector store is ready for queries, False otherwise.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        return self._vector_store is not None
 
     def document_count(self) -> int:
         """Return the number of documents stored in the collection.
@@ -89,4 +131,6 @@ class VectorStoreManager:
         Returns:
             Count of documents in the ChromaDB collection.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        if not self.is_initialized():
+            return 0
+        return self._vector_store._collection.count()

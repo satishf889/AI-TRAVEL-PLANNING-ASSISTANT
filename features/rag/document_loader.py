@@ -9,6 +9,9 @@ Requirements satisfied: RAG Requirement 1 (load travel content).
 from dataclasses import dataclass
 from pathlib import Path
 
+import fitz
+from bs4 import BeautifulSoup
+
 
 @dataclass
 class KnowledgeDocument:
@@ -44,7 +47,18 @@ class DocumentLoader:
         Raises:
             FileNotFoundError: If the knowledge_base_dir does not exist.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        if not self.knowledge_base_dir.exists():
+            raise FileNotFoundError(f"Directory not found: {self.knowledge_base_dir}")
+        docs = []
+        for file_path in self.knowledge_base_dir.iterdir():
+            if file_path.is_file():
+                if file_path.suffix == '.md':
+                    docs.append(self.load_markdown(file_path))
+                elif file_path.suffix == '.pdf':
+                    docs.append(self.load_pdf(file_path))
+                elif file_path.suffix in ['.html', '.htm']:
+                    docs.append(self.load_html(file_path))
+        return docs
 
     def load_markdown(self, file_path: Path) -> KnowledgeDocument:
         """Load a Markdown document and extract its frontmatter metadata.
@@ -58,7 +72,31 @@ class DocumentLoader:
         Raises:
             ValueError: If the file is missing required metadata fields.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        content = file_path.read_text(encoding='utf-8')
+        lines = content.split('\n')
+        source_title, source_url = None, None
+
+        if lines and lines[0].strip() == '---':
+            for i, line in enumerate(lines[1:]):
+                if line.strip() == '---':
+                    content = '\n'.join(lines[i+2:])
+                    break
+                if line.startswith('source_title:'):
+                    source_title = line.split(':', 1)[1].strip()
+                elif line.startswith('source_url:'):
+                    source_url = line.split(':', 1)[1].strip()
+
+        if not source_title:
+            raise ValueError(f"Missing source_title in {file_path}")
+        if not source_url:
+            raise ValueError(f"Missing source_url in {file_path}")
+
+        return KnowledgeDocument(
+            content=content.strip(),
+            source_title=source_title,
+            source_url=source_url,
+            file_path=file_path
+        )
 
     def load_pdf(self, file_path: Path) -> KnowledgeDocument:
         """Load a PDF document using PyMuPDF.
@@ -69,7 +107,28 @@ class DocumentLoader:
         Returns:
             KnowledgeDocument with text content and source metadata.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        content = ""
+        with fitz.open(file_path) as doc:
+            for page in doc:
+                content += page.get_text()
+
+        lines = content.split('\n')
+        source_title, source_url = "Unknown PDF", "unknown://pdf"
+        if lines and lines[0].strip() == '---':
+            for _i, line in enumerate(lines[1:]):
+                if line.strip() == '---':
+                    break
+                if line.startswith('source_title:'):
+                    source_title = line.split(':', 1)[1].strip()
+                elif line.startswith('source_url:'):
+                    source_url = line.split(':', 1)[1].strip()
+
+        return KnowledgeDocument(
+            content=content,
+            source_title=source_title,
+            source_url=source_url,
+            file_path=file_path
+        )
 
     def load_html(self, file_path: Path) -> KnowledgeDocument:
         """Load an HTML document and strip tags using BeautifulSoup.
@@ -80,4 +139,19 @@ class DocumentLoader:
         Returns:
             KnowledgeDocument with plain text content and source metadata.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        html_content = file_path.read_text(encoding='utf-8')
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        title_tag = soup.find('title')
+        source_title = title_tag.text if title_tag else "Unknown HTML"
+
+        meta_url = soup.find('meta', {'name': 'source_url'})
+        source_url = meta_url['content'] if meta_url else "unknown://html"
+
+        content_text = soup.get_text(separator='\n', strip=True)
+        return KnowledgeDocument(
+            content=content_text,
+            source_title=source_title,
+            source_url=source_url,
+            file_path=file_path
+        )
