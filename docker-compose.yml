@@ -23,7 +23,7 @@ services:
       - chromadb
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8501/_stcore/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -66,7 +66,7 @@ services:
     volumes:
       - ./chroma_db:/app/chroma_db
       - ./knowledge_base:/app/knowledge_base
-    entrypoint: ["python", "scripts/ingest_knowledge_base.py"]
+    entrypoint: [ "python", "scripts/ingest_knowledge_base.py" ]
     profiles:
       - tools
     networks:

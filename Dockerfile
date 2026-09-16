@@ -28,10 +28,7 @@ COPY scripts/ ./scripts/
 COPY pyproject.toml .
 
 # Streamlit configuration
-RUN mkdir -p /app/.streamlit
-COPY .streamlit/config.toml .streamlit/config.toml 2>/dev/null || true
-
-# Create volume mount points
+COPY .streamlit/config.toml .streamlit/config.toml
 RUN mkdir -p /app/chroma_db
 
 # Expose Streamlit port

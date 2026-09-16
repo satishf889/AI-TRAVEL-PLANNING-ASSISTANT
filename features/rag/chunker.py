@@ -50,7 +50,27 @@ class DocumentChunker:
         Returns:
             List of DocumentChunk instances with source metadata preserved.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+        )
+        
+        text_chunks = splitter.split_text(document.content)
+        
+        doc_chunks = []
+        for i, text in enumerate(text_chunks):
+            doc_chunks.append(
+                DocumentChunk(
+                    content=text,
+                    source_title=document.source_title,
+                    source_url=document.source_url,
+                    chunk_index=i,
+                    total_chunks=len(text_chunks)
+                )
+            )
+        return doc_chunks
 
     def chunk_documents(self, documents: list[KnowledgeDocument]) -> list[DocumentChunk]:
         """Split multiple documents into chunks.
@@ -61,4 +81,7 @@ class DocumentChunker:
         Returns:
             Flat list of all DocumentChunk instances from all documents.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        all_chunks = []
+        for doc in documents:
+            all_chunks.extend(self.chunk_document(doc))
+        return all_chunks
