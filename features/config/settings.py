@@ -8,7 +8,7 @@ Import the singleton `settings` object in other modules:
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,6 +64,47 @@ class Settings(BaseSettings):
     app_destination: str = Field(default="Singapore")
     log_level: str = Field(default="INFO")
 
+    # ─── Field Validators ─────────────────────────────────────────────────────
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Ensure log_level is a standard Python logging level."""
+        valid: set[str] = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        upper = v.upper()
+        if upper not in valid:
+            raise ValueError(
+                f"log_level must be one of {sorted(valid)}, got {v!r}"
+            )
+        return upper
+
+    @field_validator("embedding_device")
+    @classmethod
+    def validate_embedding_device(cls, v: str) -> str:
+        """Ensure embedding_device is either 'cpu' or 'cuda'."""
+        allowed: set[str] = {"cpu", "cuda"}
+        if v.lower() not in allowed:
+            raise ValueError(
+                f"embedding_device must be one of {sorted(allowed)}, got {v!r}"
+            )
+        return v.lower()
+
+    @model_validator(mode="after")
+    def validate_chunk_overlap_less_than_chunk_size(self) -> "Settings":
+        """Ensure chunk_overlap is strictly less than chunk_size."""
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({self.chunk_overlap}) must be strictly less than "
+                f"chunk_size ({self.chunk_size})"
+            )
+        return self
+
+    # ─── Convenience Methods ──────────────────────────────────────────────────
+
+    def get_chroma_persist_path(self) -> Path:
+        """Return chroma_persist_directory resolved to an absolute path."""
+        return self.chroma_persist_directory.resolve()
+
 
 # Module-level singleton — import this in other modules
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # google_api_key is loaded from .env at runtime
