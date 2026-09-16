@@ -4,7 +4,7 @@
 langchain>=0.3.0
 langchain-core>=0.3.0
 langchain-community>=0.3.0
-langchain-google-genai>=2.0.0          # Google Gemini Pro via LangChain
+langchain-openai>=0.2.0                # Azure OpenAI / OpenAI via LangChain
 langchain-huggingface>=0.1.0            # HuggingFace embeddings via LangChain
 langchain-chroma>=0.1.0                 # ChromaDB vector store via LangChain
 langchain-mcp-adapters>=0.1.0           # Official LangChain MCP integration
@@ -14,11 +14,14 @@ langchain-mcp-adapters>=0.1.0           # Official LangChain MCP integration
 # ─────────────────────────────────────────────────────────────
 sentence-transformers>=3.0.0            # all-MiniLM-L6-v2 (local, free)
 torch>=2.0.0                            # Required by sentence-transformers
+torchvision>=0.15.0                     # Required by sentence-transformers / transformers
 
 # ─────────────────────────────────────────────────────────────
-# Vector store
+# Vector store & Caching
 # ─────────────────────────────────────────────────────────────
 chromadb>=0.5.0
+redis>=5.0.0
+
 
 # ─────────────────────────────────────────────────────────────
 # MCP

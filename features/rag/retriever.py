@@ -56,9 +56,9 @@ class KnowledgeRetriever:
             raise RuntimeError("Vector store is not initialized")
         if not query:
             raise ValueError("Query cannot be empty")
-            
+
         docs_and_scores = self.vector_store_manager._vector_store.similarity_search_with_score(query, k=self.top_k)
-        
+
         results = []
         for doc, score in docs_and_scores:
             results.append(

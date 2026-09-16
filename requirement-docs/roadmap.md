@@ -13,6 +13,7 @@ This document tracks the progress of features for the AI Travel Planning Assista
 
 ## Completed Features
 
+- [x] Azure OpenAI (gpt-5-mini) LLM backend migration
 - [x] Interactive UI for trip itinerary planning
 
 - [x] Orchestrator Module (agent logic and context)

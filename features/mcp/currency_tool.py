@@ -127,12 +127,12 @@ class CurrencyTool:
             LangChain Tool instance with name, description, and invocation function.
         """
         from langchain_core.tools import Tool
-        
+
         def _convert(query: str) -> str:
             # Simple wrapper to parse a query or use defaults for the tool.
             # In a real setup, we'd use StructuredTool for multiple args.
             return str(self.convert(1.0, "USD", "SGD"))
-            
+
         return Tool(
             name=self.TOOL_NAME,
             description=self.TOOL_DESCRIPTION,

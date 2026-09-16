@@ -43,10 +43,12 @@ class TestSettingsDefaults:
 
         # Pass all defaults explicitly so the test is not affected by the active .env file
         s = Settings(  # type: ignore[call-arg]
-            google_api_key="test-key-default",
-            gemini_model_name="gemini-1.5-pro",
-            gemini_temperature=0.3,
-            gemini_max_output_tokens=4096,
+            azure_openai_api_key="test-key-default",
+            azure_openai_endpoint="https://test.openai.azure.com/",
+            azure_openai_api_version="2024-08-01-preview",
+            azure_openai_deployment_name="gpt-5-mini",
+            azure_openai_temperature=0.3,
+            azure_openai_max_tokens=4096,
             embedding_model_name="sentence-transformers/all-MiniLM-L6-v2",
             embedding_device="cpu",
             chroma_collection_name="singapore_travel",
@@ -61,9 +63,10 @@ class TestSettingsDefaults:
             _env_file=None,  # ignore .env
         )
 
-        assert s.gemini_model_name == "gemini-1.5-pro"
-        assert s.gemini_temperature == pytest.approx(0.3)
-        assert s.gemini_max_output_tokens == 4096
+        assert s.azure_openai_deployment_name == "gpt-5-mini"
+        assert s.azure_openai_api_version == "2024-08-01-preview"
+        assert s.azure_openai_temperature == pytest.approx(0.3)
+        assert s.azure_openai_max_tokens == 4096
         assert s.embedding_model_name == "sentence-transformers/all-MiniLM-L6-v2"
         assert s.embedding_device == "cpu"
         assert s.chroma_collection_name == "singapore_travel"
@@ -78,10 +81,14 @@ class TestSettingsDefaults:
 
     def test_chroma_paths_are_path_objects(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """chroma_persist_directory and knowledge_base_directory must be Path instances."""
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("AZURE_OPENAI_ENDPOINT", raising=False)
         from features.config.settings import Settings
 
-        s = Settings(google_api_key="test-key-path")  # type: ignore[call-arg]
+        s = Settings(  # type: ignore[call-arg]
+            azure_openai_api_key="test-key-path",
+            azure_openai_endpoint="https://test.openai.azure.com/",
+        )
 
         assert isinstance(s.chroma_persist_directory, Path)
         assert isinstance(s.knowledge_base_directory, Path)
@@ -99,9 +106,12 @@ class TestSettingsEnvOverrides:
         from features.config.settings import Settings
 
         s = Settings(  # type: ignore[call-arg]
-            google_api_key="prod-key-xyz",
-            gemini_model_name="gemini-1.5-flash",
-            gemini_temperature=0.7,
+            azure_openai_api_key="prod-key-xyz",
+            azure_openai_endpoint="https://custom.openai.azure.com/",
+            azure_openai_deployment_name="gpt-5-mini-custom",
+            azure_openai_api_version="2024-12-01-preview",
+            azure_openai_temperature=0.7,
+            azure_openai_max_tokens=2048,
             chunk_size=500,
             chunk_overlap=50,
             retrieval_top_k=3,
@@ -109,9 +119,12 @@ class TestSettingsEnvOverrides:
             embedding_device="cpu",
         )
 
-        assert s.google_api_key == "prod-key-xyz"
-        assert s.gemini_model_name == "gemini-1.5-flash"
-        assert s.gemini_temperature == pytest.approx(0.7)
+        assert s.azure_openai_api_key == "prod-key-xyz"
+        assert s.azure_openai_endpoint == "https://custom.openai.azure.com/"
+        assert s.azure_openai_deployment_name == "gpt-5-mini-custom"
+        assert s.azure_openai_api_version == "2024-12-01-preview"
+        assert s.azure_openai_temperature == pytest.approx(0.7)
+        assert s.azure_openai_max_tokens == 2048
         assert s.chunk_size == 500
         assert s.chunk_overlap == 50
         assert s.retrieval_top_k == 3
@@ -125,17 +138,37 @@ class TestSettingsEnvOverrides:
 class TestRequiredFields:
     """Verify that missing required fields raise ValidationError."""
 
-    def test_google_api_key_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """ValidationError must be raised when GOOGLE_API_KEY is absent."""
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    def test_azure_openai_api_key_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ValidationError must be raised when AZURE_OPENAI_API_KEY is absent."""
+        monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("AZURE_OPENAI_ENDPOINT", raising=False)
         from features.config.settings import Settings
 
         with pytest.raises(ValidationError) as exc_info:
-            Settings(_env_file=None)  # type: ignore[call-arg]
+            Settings(  # type: ignore[call-arg]
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                _env_file=None,
+            )
 
         errors = exc_info.value.errors()
         fields = {e["loc"][0] for e in errors}
-        assert "google_api_key" in fields
+        assert "azure_openai_api_key" in fields
+
+    def test_azure_openai_endpoint_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ValidationError must be raised when AZURE_OPENAI_ENDPOINT is absent."""
+        monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("AZURE_OPENAI_ENDPOINT", raising=False)
+        from features.config.settings import Settings
+
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(  # type: ignore[call-arg]
+                azure_openai_api_key="test-key",
+                _env_file=None,
+            )
+
+        errors = exc_info.value.errors()
+        fields = {e["loc"][0] for e in errors}
+        assert "azure_openai_endpoint" in fields
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +183,11 @@ class TestLogLevelValidator:
         """All standard Python log levels must be accepted."""
         from features.config.settings import Settings
 
-        s = Settings(google_api_key="key", log_level=level)  # type: ignore[call-arg]
+        s = Settings(  # type: ignore[call-arg]
+            azure_openai_api_key="key",
+            azure_openai_endpoint="https://test.openai.azure.com/",
+            log_level=level,
+        )
         assert s.log_level == level
 
     def test_log_level_invalid_value(self) -> None:
@@ -158,7 +195,11 @@ class TestLogLevelValidator:
         from features.config.settings import Settings
 
         with pytest.raises(ValidationError) as exc_info:
-            Settings(google_api_key="key", log_level="VERBOSE")  # type: ignore[call-arg]
+            Settings(  # type: ignore[call-arg]
+                azure_openai_api_key="key",
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                log_level="VERBOSE",
+            )
 
         errors = exc_info.value.errors()
         fields = [e["loc"][0] for e in errors]
@@ -177,7 +218,11 @@ class TestEmbeddingDeviceValidator:
         """'cpu' and 'cuda' are the only valid embedding devices."""
         from features.config.settings import Settings
 
-        s = Settings(google_api_key="key", embedding_device=device)  # type: ignore[call-arg]
+        s = Settings(  # type: ignore[call-arg]
+            azure_openai_api_key="key",
+            azure_openai_endpoint="https://test.openai.azure.com/",
+            embedding_device=device,
+        )
         assert s.embedding_device == device
 
     def test_embedding_device_invalid(self) -> None:
@@ -185,7 +230,11 @@ class TestEmbeddingDeviceValidator:
         from features.config.settings import Settings
 
         with pytest.raises(ValidationError) as exc_info:
-            Settings(google_api_key="key", embedding_device="gpu")  # type: ignore[call-arg]
+            Settings(  # type: ignore[call-arg]
+                azure_openai_api_key="key",
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                embedding_device="gpu",
+            )
 
         errors = exc_info.value.errors()
         fields = [e["loc"][0] for e in errors]
@@ -205,7 +254,8 @@ class TestChunkOverlapValidator:
 
         with pytest.raises(ValidationError):
             Settings(  # type: ignore[call-arg]
-                google_api_key="key",
+                azure_openai_api_key="key",
+                azure_openai_endpoint="https://test.openai.azure.com/",
                 chunk_size=200,
                 chunk_overlap=200,  # equal — must fail
             )
@@ -216,7 +266,8 @@ class TestChunkOverlapValidator:
 
         with pytest.raises(ValidationError):
             Settings(  # type: ignore[call-arg]
-                google_api_key="key",
+                azure_openai_api_key="key",
+                azure_openai_endpoint="https://test.openai.azure.com/",
                 chunk_size=300,
                 chunk_overlap=300,
             )
@@ -227,7 +278,8 @@ class TestChunkOverlapValidator:
 
         with pytest.raises(ValidationError):
             Settings(  # type: ignore[call-arg]
-                google_api_key="key",
+                azure_openai_api_key="key",
+                azure_openai_endpoint="https://test.openai.azure.com/",
                 chunk_size=100,
                 chunk_overlap=150,
             )
@@ -237,7 +289,8 @@ class TestChunkOverlapValidator:
         from features.config.settings import Settings
 
         s = Settings(  # type: ignore[call-arg]
-            google_api_key="key",
+            azure_openai_api_key="key",
+            azure_openai_endpoint="https://test.openai.azure.com/",
             chunk_size=1000,
             chunk_overlap=100,
         )
@@ -245,49 +298,83 @@ class TestChunkOverlapValidator:
 
 
 # ---------------------------------------------------------------------------
-# 7. Numeric range validators
+# 7. Numeric range & endpoint validators
 # ---------------------------------------------------------------------------
 
 class TestNumericRangeValidators:
-    """Verify Field constraints on numeric fields."""
+    """Verify Field constraints on numeric fields and endpoints."""
 
     def test_chunk_size_must_be_positive(self) -> None:
         """chunk_size=0 must raise ValidationError (gt=0 constraint)."""
         from features.config.settings import Settings
 
         with pytest.raises(ValidationError):
-            Settings(google_api_key="key", chunk_size=0)  # type: ignore[call-arg]
+            Settings(  # type: ignore[call-arg]
+                azure_openai_api_key="key",
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                chunk_size=0,
+            )
 
     def test_retrieval_top_k_must_be_positive(self) -> None:
         """retrieval_top_k=0 must raise ValidationError (gt=0 constraint)."""
         from features.config.settings import Settings
 
         with pytest.raises(ValidationError):
-            Settings(google_api_key="key", retrieval_top_k=0)  # type: ignore[call-arg]
+            Settings(  # type: ignore[call-arg]
+                azure_openai_api_key="key",
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                retrieval_top_k=0,
+            )
 
-    def test_gemini_temperature_too_high(self) -> None:
+    def test_azure_openai_temperature_too_high(self) -> None:
         """Temperature above 2.0 must raise ValidationError."""
         from features.config.settings import Settings
 
         with pytest.raises(ValidationError):
-            Settings(google_api_key="key", gemini_temperature=2.1)  # type: ignore[call-arg]
+            Settings(  # type: ignore[call-arg]
+                azure_openai_api_key="key",
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                azure_openai_temperature=2.1,
+            )
 
-    def test_gemini_temperature_negative(self) -> None:
+    def test_azure_openai_temperature_negative(self) -> None:
         """Negative temperature must raise ValidationError."""
         from features.config.settings import Settings
 
         with pytest.raises(ValidationError):
-            Settings(google_api_key="key", gemini_temperature=-0.1)  # type: ignore[call-arg]
+            Settings(  # type: ignore[call-arg]
+                azure_openai_api_key="key",
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                azure_openai_temperature=-0.1,
+            )
 
-    def test_gemini_temperature_boundary_valid(self) -> None:
+    def test_azure_openai_temperature_boundary_valid(self) -> None:
         """Temperatures at the exact boundaries [0.0, 2.0] must be accepted."""
         from features.config.settings import Settings
 
-        s_low = Settings(google_api_key="key", gemini_temperature=0.0)  # type: ignore[call-arg]
-        s_high = Settings(google_api_key="key", gemini_temperature=2.0)  # type: ignore[call-arg]
+        s_low = Settings(  # type: ignore[call-arg]
+            azure_openai_api_key="key",
+            azure_openai_endpoint="https://test.openai.azure.com/",
+            azure_openai_temperature=0.0,
+        )
+        s_high = Settings(  # type: ignore[call-arg]
+            azure_openai_api_key="key",
+            azure_openai_endpoint="https://test.openai.azure.com/",
+            azure_openai_temperature=2.0,
+        )
 
-        assert s_low.gemini_temperature == pytest.approx(0.0)
-        assert s_high.gemini_temperature == pytest.approx(2.0)
+        assert s_low.azure_openai_temperature == pytest.approx(0.0)
+        assert s_high.azure_openai_temperature == pytest.approx(2.0)
+
+    def test_azure_openai_endpoint_invalid_url(self) -> None:
+        """Endpoint without http:// or https:// must raise ValidationError."""
+        from features.config.settings import Settings
+
+        with pytest.raises(ValidationError):
+            Settings(  # type: ignore[call-arg]
+                azure_openai_api_key="key",
+                azure_openai_endpoint="invalid-url",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +389,8 @@ class TestGetChromaPersistPath:
         from features.config.settings import Settings
 
         s = Settings(  # type: ignore[call-arg]
-            google_api_key="key",
+            azure_openai_api_key="key",
+            azure_openai_endpoint="https://test.openai.azure.com/",
             chroma_persist_directory=Path("./chroma_db"),
         )
         result = s.get_chroma_persist_path()
@@ -314,7 +402,10 @@ class TestGetChromaPersistPath:
         """Calling the method twice must return the same path."""
         from features.config.settings import Settings
 
-        s = Settings(google_api_key="key")  # type: ignore[call-arg]
+        s = Settings(  # type: ignore[call-arg]
+            azure_openai_api_key="key",
+            azure_openai_endpoint="https://test.openai.azure.com/",
+        )
         assert s.get_chroma_persist_path() == s.get_chroma_persist_path()
 
 

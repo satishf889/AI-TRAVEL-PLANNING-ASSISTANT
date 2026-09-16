@@ -22,11 +22,19 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ─── Google Gemini LLM ────────────────────────────────────────────────────
-    google_api_key: str = Field(..., description="Google API key for Gemini Pro")
-    gemini_model_name: str = Field(default="gemini-1.5-pro")
-    gemini_temperature: float = Field(default=0.3, ge=0.0, le=2.0)
-    gemini_max_output_tokens: int = Field(default=4096, gt=0)
+    # ─── Azure OpenAI LLM ─────────────────────────────────────────────────────
+    azure_openai_api_key: str = Field(..., description="Azure OpenAI API key")
+    azure_openai_endpoint: str = Field(..., description="Azure OpenAI Endpoint URL")
+    azure_openai_api_version: str = Field(
+        default="2024-08-01-preview",
+        description="Azure OpenAI API version",
+    )
+    azure_openai_deployment_name: str = Field(
+        default="gpt-5-mini",
+        description="Azure OpenAI deployment / model name",
+    )
+    azure_openai_temperature: float = Field(default=0.3, ge=0.0, le=2.0)
+    azure_openai_max_tokens: int = Field(default=4096, gt=0)
 
     # ─── Embedding Model ──────────────────────────────────────────────────────
     embedding_model_name: str = Field(
@@ -59,12 +67,31 @@ class Settings(BaseSettings):
     # ─── Knowledge Base ───────────────────────────────────────────────────────
     knowledge_base_directory: Path = Field(default=Path("./knowledge_base"))
 
+    # ─── Cache Settings (Redis & In-Memory) ───────────────────────────────────
+    redis_enabled: bool = Field(default=True, description="Enable Redis query cache")
+    redis_host: str = Field(default="redis", description="Redis host")
+    redis_port: int = Field(default=6379, description="Redis port")
+    cache_ttl_seconds: int = Field(default=3600, gt=0, description="Cache TTL in seconds")
+
+
     # ─── Application ──────────────────────────────────────────────────────────
     app_title: str = Field(default="AI Travel Planning Assistant")
     app_destination: str = Field(default="Singapore")
     log_level: str = Field(default="INFO")
 
+
     # ─── Field Validators ─────────────────────────────────────────────────────
+
+    @field_validator("azure_openai_endpoint")
+    @classmethod
+    def validate_azure_openai_endpoint(cls, v: str) -> str:
+        """Ensure azure_openai_endpoint is a valid HTTP/HTTPS URL."""
+        trimmed = v.strip()
+        if not (trimmed.startswith("http://") or trimmed.startswith("https://")):
+            raise ValueError(
+                f"azure_openai_endpoint must start with 'http://' or 'https://', got {v!r}"
+            )
+        return trimmed
 
     @field_validator("log_level")
     @classmethod
@@ -107,4 +134,4 @@ class Settings(BaseSettings):
 
 
 # Module-level singleton — import this in other modules
-settings = Settings()  # type: ignore[call-arg]  # google_api_key is loaded from .env at runtime
+settings = Settings()  # type: ignore[call-arg]  # required fields are loaded from .env at runtime
