@@ -216,3 +216,24 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ─── AI Travel Planning Assistant — Project Specific ────────────────────────
+
+# ChromaDB persisted vector store (rebuilt via ingest script)
+chroma_db/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# Local virtual environment (use Docker instead)
+.venv/
+
+# Ruff & mypy caches
+.ruff_cache/
+.mypy_cache/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
