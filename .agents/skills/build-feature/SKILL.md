@@ -162,6 +162,7 @@ Before marking the feature complete, verify every item:
 - [ ] Module does not cross module boundaries
 - [ ] Source attribution added to all RAG/MCP responses
 - [ ] `walkthrough.md` artifact updated with a summary of changes
+- [ ] `requirement-docs/roadmap.md` updated with the new feature status
 
 ---
 

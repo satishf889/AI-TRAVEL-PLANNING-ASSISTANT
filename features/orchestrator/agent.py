@@ -13,6 +13,14 @@ Requirements satisfied: All of Section 4 (Core Features), Section 5 (Prompt Engi
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
+
+from features.orchestrator.prompt_templates import (
+    COMBINED_RAG_MCP_PROMPT_TEMPLATE,
+    FALLBACK_MCP_TOOL_FAILURE,
+    FALLBACK_NO_KB_CONTENT,
+    RAG_QA_PROMPT_TEMPLATE,
+)
 
 
 class QueryIntent(Enum):
@@ -31,120 +39,203 @@ class AgentResponse:
 
     answer: str
     intent: QueryIntent
-    kb_sources_used: list[dict]       # List of {"title": str, "url": str}
+    kb_sources_used: list[dict[str, Any]]       # List of {"title": str, "url": str}
     mcp_tools_used: list[str]         # List of tool names used (e.g., ["get_weather_forecast"])
     has_fallback: bool                # True if KB or MCP had insufficient data
     fallback_message: str | None      # Fallback message if data was insufficient
 
 
 class TravelAgent:
-    """The main LangChain-powered travel planning agent.
-
-    Orchestrates RAG retrieval, MCP tool calls, and LLM synthesis
-    to answer user queries with grounded, attributed responses.
-
-    Design principles (from prompt engineering requirements):
-    - KB content is used for ALL destination facts
-    - MCP tools are used for ALL real-time data
-    - Responses clearly distinguish KB facts, MCP data, and AI suggestions
-    - Missing information is stated clearly — never fabricated
-    - User preferences from conversation history are preserved
-    """
+    """The main LangChain-powered travel planning agent."""
 
     def __init__(
         self,
-        retriever: object,
-        mcp_client: object,
-        context_manager: object,
-        llm: object,
+        retriever: Any,
+        mcp_client: Any,
+        context_manager: Any,
+        llm: Any,
     ) -> None:
-        """Initialise the travel agent with all required components.
-
-        Args:
-            retriever: KnowledgeRetriever instance for semantic KB search.
-            mcp_client: MCPClient instance with registered weather and currency tools.
-            context_manager: ConversationContextManager for multi-turn context.
-            llm: LangChain-compatible LLM instance (Google Gemini Pro).
-        """
         self.retriever = retriever
         self.mcp_client = mcp_client
         self.context_manager = context_manager
         self.llm = llm
 
     def classify_intent(self, query: str) -> QueryIntent:
-        """Classify the user's query to determine required information sources.
+        """Classify the user's query to determine required information sources."""
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather_forecast",
+                    "description": "Get the current weather forecast for Singapore"
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "convert_currency",
+                    "description": "Convert money between currencies"
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "kb_search",
+                    "description": "Search the knowledge base for destination facts and itineraries"
+                }
+            }
+        ]
 
-        Uses keyword heuristics + LLM classification to determine whether
-        the query needs KB only, MCP only, or a combination.
+        # In a real LangChain setup, bind_tools returns a runnable.
+        llm_with_tools = self.llm.bind_tools(tools)
+        response = llm_with_tools.invoke(query)
 
-        Args:
-            query: The user's natural language question.
+        tool_calls = getattr(response, "tool_calls", [])
+        tool_names = [call.get("name", call) if isinstance(call, dict) else call.name for call in tool_calls]
 
-        Returns:
-            QueryIntent enum value.
-        """
-        raise NotImplementedError("Implement in TDD cycle")
+        if not tool_names:
+            return QueryIntent.KB_ONLY
+
+        has_weather = "get_weather_forecast" in tool_names
+        has_currency = "convert_currency" in tool_names
+        has_kb = "kb_search" in tool_names
+
+        if has_weather and has_kb:
+            return QueryIntent.COMBINED
+        elif has_currency and has_kb:
+            return QueryIntent.COMBINED
+        elif has_weather and not has_currency:
+            return QueryIntent.MCP_WEATHER
+        elif has_currency and not has_weather:
+            return QueryIntent.MCP_CURRENCY
+
+        return QueryIntent.COMBINED
 
     def process_query(self, query: str) -> AgentResponse:
-        """Process a user query and return a grounded, attributed response.
+        """Process a user query and return a grounded, attributed response."""
+        self.context_manager.update_preferences(query)
+        self.context_manager.add_user_message(query)
 
-        This is the main entry point for the agent. It:
-        1. Classifies the query intent
-        2. Retrieves KB content if needed
-        3. Invokes MCP tools if needed
-        4. Synthesises the response with proper attribution
-        5. Updates conversation history
+        intent = self.classify_intent(query)
 
-        Args:
-            query: The user's natural language question.
+        if intent == QueryIntent.KB_ONLY:
+            response = self._handle_kb_query(query)
+        elif intent == QueryIntent.MCP_WEATHER:
+            response = self._handle_weather_query(query)
+        elif intent == QueryIntent.MCP_CURRENCY:
+            response = self._handle_currency_query(query)
+        else:
+            response = self._handle_combined_query(query)
 
-        Returns:
-            AgentResponse with the answer and attribution metadata.
-        """
-        raise NotImplementedError("Implement in TDD cycle")
+        self.context_manager.add_assistant_message(response.answer)
+        return response
 
     def _handle_kb_query(self, query: str) -> AgentResponse:
-        """Handle a query that only requires knowledge base retrieval.
+        """Handle a query that only requires knowledge base retrieval."""
+        docs = self.retriever.invoke(query)
+        if not docs:
+            return AgentResponse(
+                answer="",
+                intent=QueryIntent.KB_ONLY,
+                kb_sources_used=[],
+                mcp_tools_used=[],
+                has_fallback=True,
+                fallback_message=FALLBACK_NO_KB_CONTENT
+            )
 
-        Args:
-            query: The user's question about destination facts.
+        context = "\\n".join(doc.page_content for doc in docs)
+        sources = [{"title": doc.metadata.get("title", "Unknown"), "url": doc.metadata.get("source", "")} for doc in docs]
 
-        Returns:
-            AgentResponse grounded in KB content with source citations.
-        """
-        raise NotImplementedError("Implement in TDD cycle")
+        prompt = RAG_QA_PROMPT_TEMPLATE.format(context=context, question=query)
+        answer = self.llm.invoke(prompt).content
+
+        return AgentResponse(
+            answer=answer,
+            intent=QueryIntent.KB_ONLY,
+            kb_sources_used=sources,
+            mcp_tools_used=[],
+            has_fallback=False,
+            fallback_message=None
+        )
 
     def _handle_weather_query(self, query: str) -> AgentResponse:
-        """Handle a query that requires weather MCP tool data.
-
-        Args:
-            query: The user's weather-related question.
-
-        Returns:
-            AgentResponse with weather data clearly labeled as MCP-sourced.
-        """
-        raise NotImplementedError("Implement in TDD cycle")
+        """Handle a query that requires weather MCP tool data."""
+        try:
+            weather = self.mcp_client.get_weather_forecast("Singapore")
+            prompt = f"Answer using this live weather data: {weather}\\nUser: {query}"
+            answer = self.llm.invoke(prompt).content
+            return AgentResponse(
+                answer=answer,
+                intent=QueryIntent.MCP_WEATHER,
+                kb_sources_used=[],
+                mcp_tools_used=["get_weather_forecast"],
+                has_fallback=False,
+                fallback_message=None
+            )
+        except Exception:
+            return AgentResponse(
+                answer="",
+                intent=QueryIntent.MCP_WEATHER,
+                kb_sources_used=[],
+                mcp_tools_used=[],
+                has_fallback=True,
+                fallback_message=FALLBACK_MCP_TOOL_FAILURE.format(tool_type="weather", fallback_source="Open-Meteo")
+            )
 
     def _handle_currency_query(self, query: str) -> AgentResponse:
-        """Handle a query that requires currency conversion via MCP tool.
-
-        Args:
-            query: The user's currency conversion question.
-
-        Returns:
-            AgentResponse with conversion data clearly labeled as MCP-sourced.
-        """
-        raise NotImplementedError("Implement in TDD cycle")
+        """Handle a query that requires currency conversion via MCP tool."""
+        try:
+            conversion = self.mcp_client.convert_currency(query)
+            prompt = f"Answer using this live conversion data: {conversion}\\nUser: {query}"
+            answer = self.llm.invoke(prompt).content
+            return AgentResponse(
+                answer=answer,
+                intent=QueryIntent.MCP_CURRENCY,
+                kb_sources_used=[],
+                mcp_tools_used=["convert_currency"],
+                has_fallback=False,
+                fallback_message=None
+            )
+        except Exception:
+            return AgentResponse(
+                answer="",
+                intent=QueryIntent.MCP_CURRENCY,
+                kb_sources_used=[],
+                mcp_tools_used=[],
+                has_fallback=True,
+                fallback_message=FALLBACK_MCP_TOOL_FAILURE.format(tool_type="currency", fallback_source="Frankfurter")
+            )
 
     def _handle_combined_query(self, query: str) -> AgentResponse:
-        """Handle a query requiring both KB retrieval and MCP tool calls.
+        """Handle a query requiring both KB retrieval and MCP tool calls."""
+        docs = self.retriever.invoke(query)
+        context = "\\n".join(doc.page_content for doc in docs) if docs else "No specific destination facts found."
+        sources = [{"title": doc.metadata.get("title", "Unknown"), "url": doc.metadata.get("source", "")} for doc in docs]
 
-        The primary combined scenario: weather-aware itinerary planning.
+        mcp_data = []
+        tools_used = []
+        has_fallback = False
 
-        Args:
-            query: The user's combined destination + real-time question.
+        try:
+            weather = self.mcp_client.get_weather_forecast("Singapore")
+            mcp_data.append(f"Weather: {weather}")
+            tools_used.append("get_weather_forecast")
+        except Exception:
+            has_fallback = True
 
-        Returns:
-            AgentResponse combining KB facts and MCP data with clear attribution.
-        """
-        raise NotImplementedError("Implement in TDD cycle")
+        mcp_context = "\\n".join(mcp_data)
+        prompt = COMBINED_RAG_MCP_PROMPT_TEMPLATE.format(
+            kb_context=context,
+            mcp_data=mcp_context,
+            user_request=query
+        )
+        answer = self.llm.invoke(prompt).content
+
+        return AgentResponse(
+            answer=answer,
+            intent=QueryIntent.COMBINED,
+            kb_sources_used=sources,
+            mcp_tools_used=tools_used,
+            has_fallback=has_fallback,
+            fallback_message=None
+        )
