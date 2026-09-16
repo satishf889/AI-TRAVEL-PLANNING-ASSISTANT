@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Reusable Streamlit UI components for the AI Travel Planning Assistant."""
 
 import streamlit as st

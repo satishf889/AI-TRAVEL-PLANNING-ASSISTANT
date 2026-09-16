@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Multi-turn conversation context manager.
 
 Maintains conversation history and injects relevant prior context
