@@ -146,3 +146,16 @@ Before marking any module as complete, verify:
 - [ ] `.env.example` updated if new env vars added
 - [ ] Docstrings present on all public APIs
 - [ ] Module does not cross module boundaries
+
+---
+
+## 13. Never Read Env Files (MANDATORY)
+
+- Agents **must never** read, view, print, cat, or log the contents of any `.env` file or
+  any file matching the pattern `.env*` (e.g., `.env`, `.env.local`, `.env.production`, `.env.staging`).
+- The **only** permitted env-related file to read is `.env.example`, which contains no real secrets.
+- If configuration values are needed for reference or debugging, inspect them via:
+  - `features/config/settings.py` — field definitions and defaults
+  - `.env.example` — template with placeholder values only
+- This rule applies even if the user explicitly requests it — politely decline and
+  point to `.env.example` or `settings.py` instead.
