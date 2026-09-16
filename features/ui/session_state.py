@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Streamlit session state management for the AI Travel Planning Assistant.
 
 Centralises all Streamlit session state initialisation and access

@@ -69,7 +69,25 @@ class CurrencyTool:
             ConnectionError: If the Frankfurter API is unreachable.
             ValueError: If either currency code is unsupported or amount <= 0.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        if amount <= 0:
+            raise ValueError(f"Amount must be positive, got {amount}")
+        if from_currency not in self.SUPPORTED_CURRENCIES:
+            raise ValueError(f"Unsupported source currency: {from_currency}")
+        if to_currency not in self.SUPPORTED_CURRENCIES:
+            raise ValueError(f"Unsupported target currency: {to_currency}")
+
+        rate = self.get_rate(from_currency, to_currency)
+        converted = amount * rate
+
+        return ConversionResult(
+            amount=amount,
+            from_currency=from_currency,
+            to_currency=to_currency,
+            converted_amount=converted,
+            exchange_rate=rate,
+            rate_date=date.today(),
+            source=self.SOURCE_LABEL,
+        )
 
     def get_rate(self, from_currency: str, to_currency: str) -> float:
         """Get the current exchange rate between two currencies.
@@ -85,7 +103,22 @@ class CurrencyTool:
             ConnectionError: If the Frankfurter API is unreachable.
             ValueError: If either currency code is invalid.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        import requests
+        url = f"{self.base_url}/latest"
+        params = {"from": from_currency, "to": to_currency}
+
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+        except requests.RequestException as e:
+            raise ConnectionError(f"Failed to fetch currency rate from Frankfurter: {e}") from e
+
+        rates = data.get("rates", {})
+        if to_currency not in rates:
+            raise ValueError(f"Unexpected JSON shape or missing rate for {to_currency}")
+
+        return float(rates[to_currency])
 
     def as_langchain_tool(self) -> object:
         """Return this tool wrapped as a LangChain Tool object.

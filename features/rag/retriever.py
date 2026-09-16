@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Semantic retriever for the RAG pipeline.
 
 Retrieves relevant knowledge base chunks for a given user query,

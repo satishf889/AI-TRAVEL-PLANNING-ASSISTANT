@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Main LangChain agent orchestrating RAG and MCP tools.
 
 The TravelAgent is the central coordinator that:

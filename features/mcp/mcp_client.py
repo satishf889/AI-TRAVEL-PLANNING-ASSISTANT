@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """MCP client setup and tool registry.
 
 Initialises the MCP client and registers all available MCP tools
@@ -47,7 +49,12 @@ class MCPClient:
         Returns:
             List of LangChain-compatible tool objects.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        tools = []
+        if self.weather_tool:
+            tools.append(self.weather_tool)
+        if self.currency_tool:
+            tools.append(self.currency_tool)
+        return tools
 
     def select_tool(self, user_query: str) -> str | None:
         """Suggest the appropriate MCP tool based on the user query.
@@ -61,7 +68,17 @@ class MCPClient:
         Returns:
             Tool name ("weather" or "currency") or None if no MCP tool is needed.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        query_lower = user_query.lower()
+
+        WEATHER_KEYWORDS = {"weather", "rain", "forecast", "temperature", "humid", "sunny", "wind"}
+        CURRENCY_KEYWORDS = {"currency", "convert", "exchange", "rate", "sgd", "inr", "usd", "eur", "gbp", "jpy", "money"}
+
+        if any(keyword in query_lower for keyword in WEATHER_KEYWORDS):
+            return "weather"
+        if any(keyword in query_lower for keyword in CURRENCY_KEYWORDS):
+            return "currency"
+
+        return None
 
     def is_tool_available(self, tool_name: str) -> bool:
         """Check whether a named MCP tool is available and responding.
@@ -72,4 +89,8 @@ class MCPClient:
         Returns:
             True if the tool is available, False if it is unavailable.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        if tool_name == "weather":
+            return self.weather_tool is not None
+        elif tool_name == "currency":
+            return self.currency_tool is not None
+        return False
