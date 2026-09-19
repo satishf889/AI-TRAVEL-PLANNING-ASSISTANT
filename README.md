@@ -204,16 +204,16 @@ docker-compose run --rm app pytest tests/ -v --cov=features
 
 ## Minimum Acceptance Criteria Status
 
-- [ ] Knowledge base from ≥ 3 travel resources
-- [ ] Embedding-based semantic retrieval
-- [ ] Grounded answers with source references
-- [ ] Weather information via MCP tool
-- [ ] Currency conversion via MCP tool
-- [ ] Combined RAG + MCP response (weather-aware itinerary)
-- [ ] Multi-turn conversation with context retention
-- [ ] Appropriate tool selection based on user intent
-- [ ] Clear handling of missing KB / tool failures
-- [ ] Simple, usable Streamlit interface
+- [x] Knowledge base from ≥ 3 travel resources
+- [x] Embedding-based semantic retrieval
+- [x] Grounded answers with source references
+- [x] Weather information via MCP tool
+- [x] Currency conversion via MCP tool
+- [x] Combined RAG + MCP response (weather-aware itinerary)
+- [x] Multi-turn conversation with context retention
+- [x] Appropriate tool selection based on user intent
+- [x] Clear handling of missing KB / tool failures
+- [x] Simple, usable Streamlit interface
 
 ---
 
