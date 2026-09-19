@@ -1,0 +1,64 @@
+# ─────────────────────────────────────────────────────────────
+# Core AI / LangChain
+# ─────────────────────────────────────────────────────────────
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langchain-openai>=0.2.0                # Azure OpenAI / OpenAI via LangChain
+langchain-huggingface>=0.1.0            # HuggingFace embeddings via LangChain
+langchain-chroma>=0.1.0                 # ChromaDB vector store via LangChain
+langchain-mcp-adapters>=0.1.0           # Official LangChain MCP integration
+
+# ─────────────────────────────────────────────────────────────
+# Embedding model
+# ─────────────────────────────────────────────────────────────
+sentence-transformers>=3.0.0            # all-MiniLM-L6-v2 (local, free)
+torch>=2.0.0                            # Required by sentence-transformers
+torchvision>=0.15.0                     # Required by sentence-transformers / transformers
+
+# ─────────────────────────────────────────────────────────────
+# Vector store & Caching
+# ─────────────────────────────────────────────────────────────
+chromadb>=0.5.0
+redis>=5.0.0
+
+
+# ─────────────────────────────────────────────────────────────
+# MCP
+# ─────────────────────────────────────────────────────────────
+mcp>=1.0.0                              # MCP protocol client
+httpx>=0.27.0                           # Async HTTP for MCP tool calls
+
+# ─────────────────────────────────────────────────────────────
+# UI
+# ─────────────────────────────────────────────────────────────
+streamlit>=1.38.0
+
+# ─────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────
+pydantic>=2.8.0
+pydantic-settings>=2.4.0
+python-dotenv>=1.0.0
+
+# ─────────────────────────────────────────────────────────────
+# Document loading / parsing
+# ─────────────────────────────────────────────────────────────
+pymupdf>=1.24.0                         # PDF loading
+beautifulsoup4>=4.12.0                  # HTML parsing
+lxml>=5.0.0                             # HTML/XML parser
+
+# ─────────────────────────────────────────────────────────────
+# Testing
+# ─────────────────────────────────────────────────────────────
+pytest>=8.0.0
+pytest-cov>=5.0.0
+pytest-mock>=3.14.0
+pytest-asyncio>=0.24.0
+respx>=0.21.0                           # Mock httpx requests in tests
+
+# ─────────────────────────────────────────────────────────────
+# Code quality
+# ─────────────────────────────────────────────────────────────
+ruff>=0.6.0
+mypy>=1.11.0

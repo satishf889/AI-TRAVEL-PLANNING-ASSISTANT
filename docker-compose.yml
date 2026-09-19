@@ -1,0 +1,93 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────────
+  # Main Streamlit Application
+  # ─────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-travel-assistant:latest
+    container_name: ai_travel_assistant
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+    volumes:
+      # Persist vector store data across container restarts
+      - ./chroma_db:/app/chroma_db
+      - ./knowledge_base:/app/knowledge_base
+    depends_on:
+      - chromadb
+      - redis
+
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8501/_stcore/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - travel_net
+
+  # ─────────────────────────────────────────────
+  # Redis Cache Server
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ai_travel_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - travel_net
+
+
+  # ─────────────────────────────────────────────
+  # ChromaDB Vector Store Server (optional standalone mode)
+  # Note: by default the app uses embedded ChromaDB with file persistence.
+  # Uncomment the environment variable below to switch to client-server mode.
+  # ─────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: ai_travel_chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chroma_db:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - ANONYMIZED_TELEMETRY=False
+    restart: unless-stopped
+    networks:
+      - travel_net
+
+  # ─────────────────────────────────────────────
+  # Knowledge Base Ingestion (one-shot service)
+  # Run with: docker-compose run --rm ingest
+  # ─────────────────────────────────────────────
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-travel-assistant:latest
+    container_name: ai_travel_ingest
+    env_file:
+      - .env
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./knowledge_base:/app/knowledge_base
+    entrypoint: [ "python", "scripts/ingest_knowledge_base.py" ]
+    profiles:
+      - tools
+    networks:
+      - travel_net
+
+networks:
+  travel_net:
+    driver: bridge
