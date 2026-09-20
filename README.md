@@ -3,6 +3,7 @@
 A context-aware AI assistant for planning trips to **Singapore**, combining a document-based knowledge base with real-time data via MCP tools.
 
 > **Assignment:** Developer Assignment — AI Travel Planning Assistant
+> **Repository:** [https://github.com/satishf889/AI-TRAVEL-PLANNING-ASSISTANT.git](https://github.com/satishf889/AI-TRAVEL-PLANNING-ASSISTANT.git)
 > **Destination:** Singapore
 > **Stack:** Python 3.11 · LangChain · Azure OpenAI (gpt-5-mini) · ChromaDB · Streamlit · Docker
 
@@ -173,9 +174,11 @@ AI-TRAVEL-PLANNING-ASSISTANT/
 
 ### Step 1: Environment Configuration
 
-Copy the environment template and set your Azure OpenAI API keys:
+Clone the repository, copy the environment template, and set your Azure OpenAI API keys:
 
 ```bash
+git clone https://github.com/satishf889/AI-TRAVEL-PLANNING-ASSISTANT.git
+cd AI-TRAVEL-PLANNING-ASSISTANT
 cp .env.example .env
 ```
 
