@@ -217,8 +217,8 @@ def render_sidebar() -> None:
     if st.sidebar.button("🧭 Explore", use_container_width=True, type="primary" if current == "Explore" else "secondary"):
         st.session_state["current_page"] = "Explore"
         st.rerun()
-    if st.sidebar.button("📖 Travel Guides", use_container_width=True, type="primary" if current == "Travel Guides" else "secondary"):
-        st.session_state["current_page"] = "Travel Guides"
+    if st.sidebar.button("❓ How to Use", use_container_width=True, type="primary" if current == "How to Use" else "secondary"):
+        st.session_state["current_page"] = "How to Use"
         st.rerun()
     
     st.sidebar.markdown("---")
@@ -231,6 +231,114 @@ def render_sidebar() -> None:
     if st.sidebar.button("🛑 Cancel Generation", use_container_width=True):
         st.session_state["stop_generation"] = True
         st.rerun()
+
+def render_how_to_use_page() -> None:
+    """Render the How to Use guidance page explaining chatbot capabilities."""
+    st.markdown("## ❓ How to Use TripMate")
+    st.caption("Your AI-powered Singapore travel planning assistant")
+    st.markdown("---")
+
+    # --- What TripMate can do ---
+    st.markdown("### 🎯 What TripMate Can Do For You")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info(
+            "🏙️ **Plan Itineraries**\n\n"
+            "Get personalised day-by-day Singapore travel plans tailored to your travel style, "
+            "duration, and group type."
+        )
+        st.info(
+            "🌦️ **Live Weather**\n\n"
+            "Check real-time Singapore weather forecasts sourced directly from Open-Meteo. "
+            "Includes indoor/outdoor activity recommendations."
+        )
+    with col2:
+        st.info(
+            "🏰 **Attractions & Tips**\n\n"
+            "Discover top attractions, neighbourhoods, local food, transport options, "
+            "and cultural tips from our verified knowledge base."
+        )
+        st.info(
+            "💱 **Live Currency Conversion**\n\n"
+            "Convert any amount between currencies (INR, USD, EUR, GBP, JPY and more) using "
+            "live rates from Frankfurter API."
+        )
+
+    st.markdown("---")
+
+    # --- Step-by-step guide ---
+    st.markdown("### 📍 Step-by-Step Guide")
+    steps = [
+        (
+            "1️⃣",
+            "Start a conversation",
+            'Type any Singapore travel question in the chat box at the bottom, e.g. \'What are the top things to do in Singapore?\'',
+        ),
+        (
+            "2️⃣",
+            "Plan a trip instantly",
+            "Click the **➕ Plan New Trip** button at the top right. Fill in your dates and travel group — TripMate generates a full itinerary.",
+        ),
+        (
+            "3️⃣",
+            "Ask for live data",
+            "For weather or currency queries, TripMate automatically calls live MCP tools. Try: *\'What is the weather in Singapore this week?\' or \'Convert 500 INR to SGD\'*",
+        ),
+        (
+            "4️⃣",
+            "Save what you love",
+            "After any assistant response, expand **💾 Save Options** to save itineraries to **My Trips** or places to **Saved Places**.",
+        ),
+        (
+            "5️⃣",
+            "Review saved content",
+            "Use **🧳 My Trips** and **🤍 Saved Places** in the sidebar to revisit anything you’ve bookmarked.",
+        ),
+    ]
+    for icon, title, desc in steps:
+        with st.container():
+            st.markdown(f"**{icon} {title}**")
+            st.caption(desc)
+            st.markdown("")
+
+    st.markdown("---")
+
+    # --- Example queries table ---
+    st.markdown("### 💬 Example Questions to Try")
+    examples = [
+        ("Itinerary", "🗓️", "Plan a 3-day Singapore itinerary for a couple"),
+        ("Itinerary", "🗓️", "Family-friendly 5-day Singapore trip with kids"),
+        ("Attractions", "🏛️", "What are the must-visit attractions in Singapore?"),
+        ("Attractions", "🏛️", "Best hawker centres for local food in Singapore"),
+        ("Weather", "🌦️", "What is the weather forecast for Singapore this week?"),
+        ("Weather", "🌦️", "Is it going to rain in Singapore tomorrow?"),
+        ("Currency", "💱", "Convert 10000 INR to SGD"),
+        ("Currency", "💱", "What is the exchange rate from USD to SGD?"),
+        ("Transport", "🚇", "How do I get around Singapore using public transport?"),
+        ("Culture", "🌏", "What are the cultural etiquette tips for Singapore?"),
+    ]
+    st.table(
+        {
+            "Category": [f"{icon} {cat}" for cat, icon, _ in examples],
+            "Example Question": [q for _, _, q in examples],
+        }
+    )
+
+    st.markdown("---")
+
+    # --- Limitations ---
+    st.markdown("### ⚠️ Limitations & Boundaries")
+    st.warning(
+        "🇬🇧 **Singapore Only** — TripMate is specialised for Singapore travel. "
+        "Questions about other countries or cities will not be answered.\n\n"
+        "🚫 **No Personal Advice** — TripMate does not provide medical, legal, financial, "
+        "or personal contact information.\n\n"
+        "📊 **Grounded Responses** — All destination facts come from a verified knowledge base. "
+        "If information is unavailable, TripMate will tell you clearly rather than guess.\n\n"
+        "🔄 **Live Data Availability** — Weather and currency data require an internet connection. "
+        "If a live data service is temporarily unavailable, TripMate will let you know."
+    )
+
 
 def render_example_queries() -> str:
     """Render example query buttons and return the selected query if clicked."""
