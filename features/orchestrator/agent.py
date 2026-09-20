@@ -11,6 +11,7 @@ The TravelAgent is the central coordinator that:
 Requirements satisfied: All of Section 4 (Core Features), Section 5 (Prompt Engineering).
 """
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -24,6 +25,19 @@ from features.orchestrator.prompt_templates import (
     FALLBACK_NO_KB_CONTENT,
     RAG_QA_PROMPT_TEMPLATE,
 )
+
+# Known error codes from Azure OpenAI content filtering
+_CONTENT_FILTER_MARKERS = (
+    "content_filter",
+    "ResponsibleAIPolicyViolation",
+    "content management policy",
+)
+
+# Supported currency codes for query parsing
+_KNOWN_CURRENCIES = {
+    "INR", "SGD", "USD", "EUR", "GBP", "JPY", "AUD", "MYR",
+    "CAD", "CHF", "CNY", "HKD", "NZD", "SEK", "NOK", "DKK",
+}
 
 
 class QueryIntent(Enum):
@@ -141,9 +155,13 @@ class TravelAgent:
             has_currency = "convert_currency" in tool_names
             has_kb = "kb_search" in tool_names
 
-            if has_weather and has_kb:
+            TRIP_KEYWORDS = {"plan", "trip", "itinerary", "days", "day", "visit", "schedule", "decide", "attractions", "things to do"}
+            query_lower = query.lower()
+            is_trip_query = any(kw in query_lower for kw in TRIP_KEYWORDS)
+
+            if has_weather and (has_kb or is_trip_query):
                 return QueryIntent.COMBINED
-            elif has_currency and has_kb:
+            elif has_currency and (has_kb or is_trip_query):
                 return QueryIntent.COMBINED
             elif has_weather and not has_currency:
                 return QueryIntent.MCP_WEATHER
@@ -241,15 +259,26 @@ class TravelAgent:
                     if text:
                         accumulated_answer.append(text)
                         yield text
-            except Exception:
+            except Exception as llm_err:
+                err_str = str(llm_err)
+                if any(marker in err_str for marker in _CONTENT_FILTER_MARKERS):
+                    # Re-raise as a clean, typed error — the UI layer will catch and
+                    # display a friendly message without exposing Azure internals.
+                    raise ValueError("content_filter") from llm_err
                 handled = False
 
         if not handled and hasattr(self.llm, "invoke"):
-            response = self.llm.invoke(prompt)
-            text = self._extract_text(response.content) if hasattr(response, "content") else str(response)
-            if text:
-                accumulated_answer.append(text)
-                yield text
+            try:
+                response = self.llm.invoke(prompt)
+                text = self._extract_text(response.content) if hasattr(response, "content") else str(response)
+                if text:
+                    accumulated_answer.append(text)
+                    yield text
+            except Exception as llm_err:
+                err_str = str(llm_err)
+                if any(marker in err_str for marker in _CONTENT_FILTER_MARKERS):
+                    raise ValueError("content_filter") from llm_err
+                raise
 
         # Cache completed response
         full_text = "".join(accumulated_answer)
@@ -309,50 +338,136 @@ class TravelAgent:
         metadata_out["kb_sources_used"] = [self._extract_doc_source(doc) for doc in docs]
         return RAG_QA_PROMPT_TEMPLATE.format(context=context, history=history, question=query)
 
+    def _parse_currency_query(
+        self, query: str
+    ) -> tuple[float, str, str]:
+        """Extract amount, from_currency, and to_currency from a user query.
+
+        Supports patterns like:
+          - "convert 500 INR to SGD"
+          - "how much is 200 USD in EUR"
+          - "100 GBP to JPY"
+          - "what is the exchange rate for SGD to USD"
+
+        Returns:
+            Tuple of (amount, from_currency, to_currency). Falls back to
+            (1.0, "USD", "SGD") when parsing is not conclusive.
+        """
+        query_upper = query.upper()
+
+        # Extract numeric amount (e.g. 500, 1000.50)
+        amount_match = re.search(r"([\d,]+(?:\.\d+)?)", query)
+        amount = 1.0
+        if amount_match:
+            try:
+                amount = float(amount_match.group(1).replace(",", ""))
+            except ValueError:
+                amount = 1.0
+
+        # Find all currency codes mentioned in the query
+        found_currencies = [
+            code for code in _KNOWN_CURRENCIES if code in query_upper
+        ]
+
+        if len(found_currencies) >= 2:
+            # Determine order: whichever appears first is the source currency
+            positions = {
+                code: query_upper.find(code) for code in found_currencies
+            }
+            sorted_codes = sorted(found_currencies, key=lambda c: positions[c])
+            return amount, sorted_codes[0], sorted_codes[1]
+        elif len(found_currencies) == 1:
+            # One currency found; assume converting to SGD if not already SGD
+            single = found_currencies[0]
+            if single == "SGD":
+                return amount, "USD", "SGD"
+            return amount, single, "SGD"
+
+        # No recognisable currencies — default to USD → SGD
+        return amount, "USD", "SGD"
+
     def _prepare_weather_query(self, query: str, metadata_out: dict[str, Any]) -> str:
+        """Prepare a prompt grounded in live weather data from the MCP weather tool."""
         try:
             weather = self.mcp_client.get_weather_forecast("Singapore")
             metadata_out["mcp_tools_used"] = ["get_weather_forecast"]
-            return f"Answer using this live weather data: {weather}\nUser: {query}"
+            return (
+                f"Answer using this live weather data from Open-Meteo MCP tool:\n"
+                f"{weather}\n\nUser question: {query}"
+            )
         except Exception:
             metadata_out["has_fallback"] = True
             metadata_out["fallback_message"] = FALLBACK_MCP_TOOL_FAILURE.format(
-                tool_type="weather", fallback_source="Open-Meteo"
+                tool_type="weather", fallback_source="Open-Meteo (https://open-meteo.com)"
             )
             return ""
 
     def _prepare_currency_query(self, query: str, metadata_out: dict[str, Any]) -> str:
+        """Prepare a prompt grounded in live currency data, parsing the user's actual request."""
+        amount, from_currency, to_currency = self._parse_currency_query(query)
         try:
-            conversion = self.mcp_client.convert_currency(query)
+            conversion = self.mcp_client.convert_currency(
+                query=query,
+                amount=amount,
+                from_currency=from_currency,
+                to_currency=to_currency,
+            )
             metadata_out["mcp_tools_used"] = ["convert_currency"]
-            return f"Answer using this live conversion data: {conversion}\nUser: {query}"
+            return (
+                f"Answer using this live currency conversion data from Frankfurter MCP tool:\n"
+                f"{conversion}\n\nUser question: {query}"
+            )
         except Exception:
             metadata_out["has_fallback"] = True
             metadata_out["fallback_message"] = FALLBACK_MCP_TOOL_FAILURE.format(
-                tool_type="currency", fallback_source="Frankfurter"
+                tool_type="currency", fallback_source="Frankfurter (https://www.frankfurter.app)"
             )
             return ""
 
     def _prepare_combined_query(self, query: str, metadata_out: dict[str, Any]) -> str:
+        """Prepare a combined prompt using both KB and all relevant MCP tools."""
         docs = self._retrieve_docs(query)
-        context = "\n\n".join(self._extract_doc_content(doc) for doc in docs) if docs else "No specific destination facts found."
+        context = (
+            "\n\n".join(self._extract_doc_content(doc) for doc in docs)
+            if docs
+            else "No specific destination facts found."
+        )
         metadata_out["kb_sources_used"] = [self._extract_doc_source(doc) for doc in docs]
 
-        mcp_data = []
+        mcp_data: list[str] = []
+
+        # Always attempt weather data for combined queries
         try:
             weather = self.mcp_client.get_weather_forecast("Singapore")
-            mcp_data.append(f"Weather: {weather}")
+            mcp_data.append(f"🌦️ Live Weather (Open-Meteo MCP):\n{weather}")
             metadata_out["mcp_tools_used"].append("get_weather_forecast")
         except Exception:
             metadata_out["has_fallback"] = True
 
-        mcp_context = "\n".join(mcp_data)
+        # Attempt currency data when the query mentions currency-related keywords
+        currency_keywords = {"currency", "convert", "exchange", "rate", "sgd", "inr",
+                             "usd", "eur", "gbp", "jpy", "aud", "myr", "money", "dollar"}
+        query_lower = query.lower()
+        if any(kw in query_lower for kw in currency_keywords):
+            amount, from_curr, to_curr = self._parse_currency_query(query)
+            try:
+                conversion = self.mcp_client.convert_currency(
+                    query=query, amount=amount,
+                    from_currency=from_curr, to_currency=to_curr,
+                )
+                mcp_data.append(f"💱 Live Currency (Frankfurter MCP):\n{conversion}")
+                if "convert_currency" not in metadata_out["mcp_tools_used"]:
+                    metadata_out["mcp_tools_used"].append("convert_currency")
+            except Exception:
+                metadata_out["has_fallback"] = True
+
+        mcp_context = "\n\n".join(mcp_data) if mcp_data else "No live MCP data available."
         history = self._get_history_text()
         return COMBINED_RAG_MCP_PROMPT_TEMPLATE.format(
             kb_context=context,
             mcp_data=mcp_context,
             history=history,
-            user_request=query
+            user_request=query,
         )
 
 

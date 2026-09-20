@@ -49,6 +49,8 @@ class DocumentLoader:
 
         docs = []
         for file_path in self.knowledge_base_dir.glob("*.md"):
+            if file_path.name.lower() == "readme.md":
+                continue
             docs.append(self.load_markdown(file_path))
         return docs
 

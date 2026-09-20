@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 from datetime import date, timedelta
+import logging
 
 import streamlit as st
 
@@ -10,6 +11,7 @@ from features.ui.components import (
     inject_custom_css,
     render_chat_message,
     render_example_queries,
+    render_how_to_use_page,
     render_mcp_tool_badge,
     render_sidebar,
 )
@@ -20,6 +22,62 @@ from features.ui.session_state import (
     get_chat_history,
     initialise_session_state,
 )
+
+_log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Error classification — NEVER expose raw backend errors to users
+# ---------------------------------------------------------------------------
+_CONTENT_FILTER_MARKERS = (
+    "content_filter",
+    "ResponsibleAIPolicyViolation",
+    "content management policy",
+)
+_CONNECTION_MARKERS = (
+    "ConnectionError",
+    "connection",
+    "timeout",
+    "network",
+    "unreachable",
+    "Failed to fetch",
+)
+_INIT_MARKERS = (
+    "not initialized",
+    "Agent not initialized",
+    "RuntimeError",
+    "vector store",
+)
+
+
+def _handle_query_error(exc: Exception) -> None:
+    """Display a user-friendly error message based on the exception type.
+
+    Never exposes raw stack traces or backend error details to the user.
+    """
+    _log.error("Query error (hidden from user): %s", exc, exc_info=True)
+    err_str = str(exc)
+
+    if any(marker in err_str for marker in _CONTENT_FILTER_MARKERS):
+        st.error(
+            "⚠️ I’m unable to respond to that request. "
+            "Please try rephrasing your question in a different way."
+        )
+    elif any(marker in err_str for marker in _CONNECTION_MARKERS):
+        st.error(
+            "📶 I’m having trouble connecting to one of my data sources right now. "
+            "Please try again in a moment."
+        )
+    elif any(marker in err_str for marker in _INIT_MARKERS):
+        st.error(
+            "⏳ The assistant is still starting up. "
+            "Please wait a few seconds and try again."
+        )
+    else:
+        st.error(
+            "🤔 Something went wrong while processing your request. "
+            "Please try again or rephrase your question."
+        )
 
 @st.dialog("Plan New Trip")
 def trip_planning_form():
@@ -124,7 +182,7 @@ def render_chat_page() -> None:
                 st.rerun()
 
             except Exception as e:
-                st.error(f"Error processing query: {e}")
+                _handle_query_error(e)
 
 def main() -> None:
     """Main Streamlit application function."""
@@ -149,7 +207,7 @@ def main() -> None:
             trip_planning_form()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    st.caption("Powered by Azure OpenAI (gpt-4o-mini) + LangChain + RAG + MCP Tools")
+    st.caption("Powered by Azure OpenAI (gpt-5-mini) + LangChain + RAG + MCP Tools")
     st.markdown("---")
 
     current_page = st.session_state.get("current_page", "Chat")
@@ -172,8 +230,8 @@ def main() -> None:
             for i, place in enumerate(st.session_state["saved_places"]):
                 with st.expander(f"Saved Place #{i+1}"):
                     st.markdown(place)
-    else:
-        st.info(f"{current_page} - Coming Soon!")
+    elif current_page == "How to Use":
+        render_how_to_use_page()
 
 if __name__ == "__main__":
     main()

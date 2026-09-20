@@ -6,6 +6,9 @@ Uses the all-MiniLM-L6-v2 model which runs locally — no API key required.
 Requirements satisfied: RAG Requirement 3 (generate embeddings for chunks).
 """
 
+from langchain_huggingface import HuggingFaceEmbeddings
+
+from features.config.settings import settings
 from features.rag.chunker import DocumentChunk
 
 
@@ -16,9 +19,9 @@ class Embedder:
     No external API calls are made for embedding generation.
     """
 
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
-                 device: str = "cpu") -> None:
-        """Initialise the embedder and load the model.
+    def __init__(self, model_name: str = settings.embedding_model_name,
+                 device: str = settings.embedding_device) -> None:
+        """Initialise the embedder and load the model settings.
 
         Args:
             model_name: HuggingFace model identifier for sentence-transformers.
@@ -26,17 +29,17 @@ class Embedder:
         """
         self.model_name = model_name
         self.device = device
-        self._model = None  # Lazy-loaded on first use
 
-    def get_langchain_embeddings(self) -> object:
+    def get_langchain_embeddings(self) -> HuggingFaceEmbeddings:
         """Return a LangChain-compatible HuggingFaceEmbeddings object.
 
-        This is the primary interface used by the vector store and retriever.
-
         Returns:
-            HuggingFaceEmbeddings instance configured with the specified model.
+            HuggingFaceEmbeddings instance configured for HuggingFace.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        return HuggingFaceEmbeddings(
+            model_name=self.model_name,
+            model_kwargs={"device": self.device},
+        )
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of text strings.
@@ -47,7 +50,8 @@ class Embedder:
         Returns:
             List of embedding vectors (each is a list of floats).
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        embeddings_obj: str | object = self.get_langchain_embeddings()
+        return embeddings_obj.embed_documents(texts)  # type: ignore[union-attr]
 
     def embed_chunks(self, chunks: list[DocumentChunk]) -> list[list[float]]:
         """Generate embeddings for a list of DocumentChunks.
@@ -58,4 +62,5 @@ class Embedder:
         Returns:
             List of embedding vectors corresponding to each chunk's content.
         """
-        raise NotImplementedError("Implement in TDD cycle")
+        texts = [chunk.content for chunk in chunks]
+        return self.embed_texts(texts)

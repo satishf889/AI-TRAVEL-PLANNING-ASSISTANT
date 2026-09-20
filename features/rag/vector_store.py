@@ -9,38 +9,36 @@ Requirements satisfied: RAG Requirement 4 (store embeddings in a vector store).
 from pathlib import Path
 
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
 
 from features.rag.chunker import DocumentChunk
+from features.rag.embedder import Embedder
 
 
 class VectorStoreManager:
     """Manages the ChromaDB vector store for the Singapore knowledge base.
 
     Supports both creation (ingestion time) and loading (query time) of
-    the vector store. The store is persisted to disk for reuse across sessions.
+    the vector store using Embedder. The store is persisted to disk.
     """
 
     def __init__(
         self,
         persist_directory: Path,
         collection_name: str,
-        embedding_model_name: str,
-        embedding_device: str = "cpu",
     ) -> None:
         """Initialise the vector store manager.
 
         Args:
             persist_directory: Directory where ChromaDB persists its data.
             collection_name: Name of the ChromaDB collection.
-            embedding_model_name: HuggingFace model for embeddings.
-            embedding_device: Device for the embedding model ("cpu" or "cuda").
         """
         self.persist_directory = persist_directory
         self.collection_name = collection_name
-        self.embedding_model_name = embedding_model_name
-        self.embedding_device = embedding_device
         self._vector_store = None
+
+    def _get_embeddings(self) -> object:
+        """Instantiate embeddings using Embedder."""
+        return Embedder().get_langchain_embeddings()
 
     def create_from_chunks(self, chunks: list[DocumentChunk]) -> None:
         """Create and persist a vector store from document chunks.
@@ -57,10 +55,7 @@ class VectorStoreManager:
         if not chunks:
             raise ValueError("chunks list cannot be empty")
 
-        embeddings = HuggingFaceEmbeddings(
-            model_name=self.embedding_model_name,
-            model_kwargs={"device": self.embedding_device}
-        )
+        embeddings = self._get_embeddings()
 
         texts = [chunk.content for chunk in chunks]
         metadatas = [
@@ -91,10 +86,7 @@ class VectorStoreManager:
         if not self.persist_directory.exists():
             raise FileNotFoundError(f"Persist directory not found: {self.persist_directory}")
 
-        embeddings = HuggingFaceEmbeddings(
-            model_name=self.embedding_model_name,
-            model_kwargs={"device": self.embedding_device}
-        )
+        embeddings = self._get_embeddings()
 
         self._vector_store = Chroma(
             collection_name=self.collection_name,

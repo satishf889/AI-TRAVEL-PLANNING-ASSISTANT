@@ -182,7 +182,7 @@ class TestFallbackBehavior:
         response = travel_agent.process_query("Tell me about an unknown place")
 
         assert response.has_fallback is True
-        assert "searched my Singapore travel knowledge base" in response.fallback_message
+        assert "searched the Singapore travel knowledge base" in response.fallback_message
 
     def test_fallback_mcp_failure_combined(self, travel_agent: TravelAgent, mock_retriever: MagicMock, mock_mcp_client: MagicMock, mock_llm: MagicMock) -> None:
         """When MCP fails on COMBINED query, return KB response anyway without total failure."""

@@ -103,14 +103,30 @@ class MCPClient:
         forecast = self.weather_tool.get_forecast()
         return str(forecast)
 
-    def convert_currency(self, query: str) -> str:
-        """Parse query and get currency conversion as a formatted string.
-        For simplicity in this stub, we'll extract INR/SGD/USD or default to USD->SGD.
+    def convert_currency(
+        self,
+        query: str = "",
+        amount: float = 1.0,
+        from_currency: str = "USD",
+        to_currency: str = "SGD",
+    ) -> str:
+        """Get currency conversion as a formatted string.
+
+        Args:
+            query: Raw user query (used as fallback identifier only; parsed values take priority).
+            amount: The numeric amount to convert. Defaults to 1.0.
+            from_currency: ISO 4217 source currency code. Defaults to \"USD\".
+            to_currency: ISO 4217 target currency code. Defaults to \"SGD\".
+
+        Returns:
+            Human-readable conversion result string.
+
+        Raises:
+            RuntimeError: If the currency tool is not available.
+            ConnectionError: If the Frankfurter API is unreachable.
+            ValueError: If currency codes are unsupported.
         """
         if not self.currency_tool:
             raise RuntimeError("Currency tool not available")
-        # In a real app, we'd use LLM extraction. Here we do simple fallback.
-        # But for end-to-end demo, we will just call it with 1 USD to SGD if we can't parse easily.
-        # Wait, if we just use the currency_tool's LangChain tool logic:
-        # Since currency_tool.convert takes (amount, from, to):
-        return str(self.currency_tool.convert(1.0, "USD", "SGD"))
+        result = self.currency_tool.convert(amount, from_currency, to_currency)
+        return str(result)

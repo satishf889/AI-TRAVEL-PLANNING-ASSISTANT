@@ -93,6 +93,17 @@ class Settings(BaseSettings):
             )
         return trimmed
 
+    @field_validator("embedding_device")
+    @classmethod
+    def validate_embedding_device(cls, v: str) -> str:
+        """Ensure embedding_device is either 'cpu' or 'cuda'."""
+        allowed: set[str] = {"cpu", "cuda"}
+        if v.lower() not in allowed:
+            raise ValueError(
+                f"embedding_device must be one of {sorted(allowed)}, got {v!r}"
+            )
+        return v.lower()
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -104,17 +115,6 @@ class Settings(BaseSettings):
                 f"log_level must be one of {sorted(valid)}, got {v!r}"
             )
         return upper
-
-    @field_validator("embedding_device")
-    @classmethod
-    def validate_embedding_device(cls, v: str) -> str:
-        """Ensure embedding_device is either 'cpu' or 'cuda'."""
-        allowed: set[str] = {"cpu", "cuda"}
-        if v.lower() not in allowed:
-            raise ValueError(
-                f"embedding_device must be one of {sorted(allowed)}, got {v!r}"
-            )
-        return v.lower()
 
     @model_validator(mode="after")
     def validate_chunk_overlap_less_than_chunk_size(self) -> "Settings":

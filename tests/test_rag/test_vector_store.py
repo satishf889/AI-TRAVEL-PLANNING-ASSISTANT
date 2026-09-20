@@ -18,8 +18,6 @@ def vector_store_manager(tmp_path: Path) -> VectorStoreManager:
     return VectorStoreManager(
         persist_directory=tmp_path / "chroma_db",
         collection_name="test_collection",
-        embedding_model_name="all-MiniLM-L6-v2",
-        embedding_device="cpu",
     )
 
 
@@ -34,12 +32,9 @@ class TestVectorStoreManager:
         manager = VectorStoreManager(
             persist_directory=persist_dir,
             collection_name="test_collection",
-            embedding_model_name="all-MiniLM-L6-v2",
         )
         assert manager.persist_directory == persist_dir
         assert manager.collection_name == "test_collection"
-        assert manager.embedding_model_name == "all-MiniLM-L6-v2"
-        assert manager.embedding_device == "cpu"
         assert not manager.is_initialized()
 
     def test_create_from_chunks_raises_on_empty(self, vector_store_manager: VectorStoreManager) -> None:
@@ -48,24 +43,21 @@ class TestVectorStoreManager:
             vector_store_manager.create_from_chunks([])
 
     @patch("features.rag.vector_store.Chroma")
-    @patch("features.rag.vector_store.HuggingFaceEmbeddings")
+    @patch("features.rag.vector_store.Embedder")
     def test_create_from_chunks_initialises_store(
         self,
-        mock_embeddings: MagicMock,
+        mock_embedder: MagicMock,
         mock_chroma: MagicMock,
         vector_store_manager: VectorStoreManager,
         sample_chunks: list[DocumentChunk],
     ) -> None:
-        """create_from_chunks embeds and stores the provided chunks."""
+        """create_from_chunks embeds and stores the provided chunks using Embedder."""
         mock_instance = MagicMock()
         mock_chroma.from_texts.return_value = mock_instance
-        
+
         vector_store_manager.create_from_chunks(sample_chunks)
-        
-        mock_embeddings.assert_called_once_with(
-            model_name="all-MiniLM-L6-v2", 
-            model_kwargs={"device": "cpu"}
-        )
+
+        assert mock_embedder.call_count == 1
         assert mock_chroma.from_texts.call_count == 1
         assert vector_store_manager.is_initialized()
         assert vector_store_manager._vector_store == mock_instance
@@ -77,26 +69,23 @@ class TestVectorStoreManager:
             vector_store_manager.load()
 
     @patch("features.rag.vector_store.Chroma")
-    @patch("features.rag.vector_store.HuggingFaceEmbeddings")
+    @patch("features.rag.vector_store.Embedder")
     def test_load_initialises_store(
         self,
-        mock_embeddings: MagicMock,
+        mock_embedder: MagicMock,
         mock_chroma: MagicMock,
         vector_store_manager: VectorStoreManager,
     ) -> None:
         """load successfully initializes the store from disk."""
         # Create the directory so load() doesn't fail
         vector_store_manager.persist_directory.mkdir()
-        
+
         mock_instance = MagicMock()
         mock_chroma.return_value = mock_instance
-        
+
         vector_store_manager.load()
-        
-        mock_embeddings.assert_called_once_with(
-            model_name="all-MiniLM-L6-v2", 
-            model_kwargs={"device": "cpu"}
-        )
+
+        assert mock_embedder.call_count == 1
         assert mock_chroma.call_count == 1
         assert vector_store_manager.is_initialized()
         assert vector_store_manager._vector_store == mock_instance
