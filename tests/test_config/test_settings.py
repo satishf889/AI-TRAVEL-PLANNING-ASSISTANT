@@ -116,7 +116,6 @@ class TestSettingsEnvOverrides:
             chunk_overlap=50,
             retrieval_top_k=3,
             log_level="DEBUG",
-            embedding_device="cpu",
         )
 
         assert s.azure_openai_api_key == "prod-key-xyz"
@@ -204,41 +203,6 @@ class TestLogLevelValidator:
         errors = exc_info.value.errors()
         fields = [e["loc"][0] for e in errors]
         assert "log_level" in fields
-
-
-# ---------------------------------------------------------------------------
-# 5. embedding_device validator
-# ---------------------------------------------------------------------------
-
-class TestEmbeddingDeviceValidator:
-    """Verify the embedding_device field validator."""
-
-    @pytest.mark.parametrize("device", ["cpu", "cuda"])
-    def test_embedding_device_valid(self, device: str) -> None:
-        """'cpu' and 'cuda' are the only valid embedding devices."""
-        from features.config.settings import Settings
-
-        s = Settings(  # type: ignore[call-arg]
-            azure_openai_api_key="key",
-            azure_openai_endpoint="https://test.openai.azure.com/",
-            embedding_device=device,
-        )
-        assert s.embedding_device == device
-
-    def test_embedding_device_invalid(self) -> None:
-        """An unsupported device string must raise ValidationError."""
-        from features.config.settings import Settings
-
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(  # type: ignore[call-arg]
-                azure_openai_api_key="key",
-                azure_openai_endpoint="https://test.openai.azure.com/",
-                embedding_device="gpu",
-            )
-
-        errors = exc_info.value.errors()
-        fields = [e["loc"][0] for e in errors]
-        assert "embedding_device" in fields
 
 
 # ---------------------------------------------------------------------------

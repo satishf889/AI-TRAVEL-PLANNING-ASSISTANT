@@ -79,8 +79,6 @@ class TestAgentDependencies:
         # We need to mock settings so it doesn't fail trying to read env vars
         mock_settings.get_chroma_persist_path.return_value = MagicMock()
         mock_settings.chroma_collection_name = "test"
-        mock_settings.embedding_model_name = "test"
-        mock_settings.embedding_device = "cpu"
         mock_settings.retrieval_top_k = 5
         mock_settings.weather_api_base_url = "https://api.open-meteo.com/v1"
         mock_settings.destination_latitude = 1.3521

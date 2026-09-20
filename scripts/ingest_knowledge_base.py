@@ -57,8 +57,6 @@ def main() -> None:
     vector_store = VectorStoreManager(
         persist_directory=settings.chroma_persist_directory,
         collection_name=settings.chroma_collection_name,
-        embedding_model_name=settings.embedding_model_name,
-        embedding_device=settings.embedding_device,
     )
     vector_store.create_from_chunks(chunks)
     logger.info(f"Stored {vector_store.document_count()} vectors in ChromaDB")

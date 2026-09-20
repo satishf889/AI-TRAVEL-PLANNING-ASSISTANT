@@ -160,45 +160,97 @@ AI-TRAVEL-PLANNING-ASSISTANT/
 
 ---
 
-## Setup Instructions
+## Setup & Evaluator Guide
 
 ### Prerequisites
-- Docker + Docker Compose
-- Azure OpenAI API key and endpoint (with `gpt-5-mini` model deployment)
+- **Python 3.11+** or **Docker & Docker Compose**
+- **Azure OpenAI Credentials**: API Key and Endpoint URL with `gpt-5-mini` (or standard GPT-4o model deployment).
 
-### 1. Clone and configure
+---
+
+### Step 1: Environment Configuration
+
+Copy the environment template and set your Azure OpenAI API keys:
+
 ```bash
-git clone <repo-url>
-cd AI-TRAVEL-PLANNING-ASSISTANT
 cp .env.example .env
-# Edit .env and set your AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, etc.
 ```
 
-### 2. Populate knowledge base
+Open `.env` and fill in the required Azure OpenAI values:
+```ini
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key_here
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-mini
+AZURE_OPENAI_API_VERSION=2024-08-01-preview
+```
+
+---
+
+### Step 2: Running the Application
+
+Choose **Option A (Docker)** or **Option B (Local Virtual Environment)**:
+
+#### Option A: Running with Docker (Recommended)
+
+1. **Build and Start All Services**:
+   ```bash
+   docker-compose up --build
+   ```
+2. **Access the Application**:
+   Open your browser at `http://localhost:8501`.
+
+#### Option B: Running Locally (Python `.venv`)
+
+1. **Create and Activate Virtual Environment**:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate  # On macOS/Linux
+   ```
+2. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Ingest Knowledge Base into ChromaDB**:
+   ```bash
+   python scripts/ingest_knowledge_base.py
+   ```
+   *Output should indicate: `Ingestion complete! ✅ (48 vectors stored in ChromaDB)`*
+
+4. **Launch Streamlit Web UI**:
+   ```bash
+   streamlit run features/ui/app.py
+   ```
+   *Open your browser at `http://localhost:8501`.*
+
+---
+
+### Step 3: Running Automated Unit & Integration Tests
+
+To run the complete test suite with coverage report:
+
 ```bash
-# Add actual content to knowledge_base/*.md files
-# (replacing the placeholder content)
+# Using local virtual environment
+pytest tests/ -v
+
+# Or using Docker
+docker-compose run --rm app pytest tests/ -v
 ```
 
-### 3. Ingest knowledge base
-```bash
-docker-compose run --rm ingest
-```
+---
 
-### 4. Run the app
-```bash
-docker-compose up app
-# Open http://localhost:8501
-```
+## 🧪 Evaluator Verification Checklist & Sample Queries
 
-### 5. Run tests
-```bash
-# Inside Docker
-docker-compose run --rm app pytest tests/ -v --cov=features
+Try these sample queries in the Streamlit UI (`http://localhost:8501`) to evaluate each requirement:
 
-# Or locally (with .venv activated)
-.venv/bin/pytest tests/ -v --cov=features
-```
+| Evaluation Criteria | Test Query | What to Verify |
+|---------------------|------------|----------------|
+| **1. Destination Knowledge (RAG)** | *"What are the top attractions to visit in Singapore?"* | Grounded response with document citations (e.g. `📚 Source: ...`) |
+| **2. Public Transport (RAG)** | *"How does public transport work in Singapore?"* | Fact-checked transport guide sourced from knowledge base metadata |
+| **3. Live Weather Forecast (MCP)** | *"What is the weather forecast for Singapore this week?"* | Response explicitly marked with `🌤️ Live data from Open-Meteo` |
+| **4. Live Currency Conversion (MCP)** | *"Convert 500 USD to SGD"* | Real-time rate conversion labeled with `💱 Live rate from Frankfurter` |
+| **5. Combined RAG + MCP (Mandatory)** | *"Create a 3-day Singapore itinerary for next week and adjust activities based on the weather forecast."* | Combines KB attractions with live weather forecast to recommend outdoor/indoor activities |
+| **6. Budget + Currency + Itinerary** | *"I have a budget of INR 50,000. Convert to SGD and suggest a 3-day plan."* | Performs currency conversion via MCP, converts budget to SGD, and builds itinerary via RAG |
+| **7. Multi-turn Context** | *Follow-up:* *"What indoor options are nearby for Day 2?"* | Retains context from previous turn (preserves destination, duration, budget preferences) |
 
 ---
 
@@ -214,25 +266,3 @@ docker-compose run --rm app pytest tests/ -v --cov=features
 - [x] Appropriate tool selection based on user intent
 - [x] Clear handling of missing KB / tool failures
 - [x] Simple, usable Streamlit interface
-
----
-
-## Sample Questions
-
-### RAG (Knowledge Base)
-- "What are the must-visit attractions in Singapore?"
-- "Which neighbourhoods are best for cultural experiences?"
-- "How do I get around Singapore using public transport?"
-- "Suggest indoor activities for rainy days."
-- "Create a three-day sightseeing itinerary."
-
-### MCP Tools
-- "What is the weather forecast for Singapore this week?"
-- "Is it going to rain tomorrow in Singapore?"
-- "Convert INR 50,000 to SGD."
-- "How much is 200 SGD in USD?"
-
-### Combined (RAG + MCP)
-- "Create a 3-day Singapore itinerary for next week, adjusted for the weather."
-- "I have a budget of INR 60,000. Convert it to SGD and suggest a 3-day trip."
-- "Plan a family-friendly trip and check if indoor alternatives are needed based on the forecast."

@@ -22,8 +22,6 @@ def get_agent_dependencies() -> tuple[Any, Any, Any, Any]:
     vector_store_manager = VectorStoreManager(
         persist_directory=settings.get_chroma_persist_path(),
         collection_name=settings.chroma_collection_name,
-        embedding_model_name=settings.embedding_model_name,
-        embedding_device=settings.embedding_device,
     )
     # Attempt to load if possible. If not initialized, retriever raises errors later
     try:
